@@ -186,13 +186,14 @@ func TestDeriveFields(t *testing.T) {
 	// Clear all the computed fields and re-derive them
 	number := big.NewInt(1)
 	hash := common.BytesToHash([]byte{0x03, 0x14})
+	ctx := params.NewContextWithBlock(params.TestChainConfig, number)
 
 	clearComputedFieldsOnReceipts(t, receipts)
-	if err := receipts.DeriveFields(params.TestChainConfig, hash, number.Uint64(), txs); err != nil {
+	if err := receipts.DeriveFields(ctx, hash, number.Uint64(), txs); err != nil {
 		t.Fatalf("DeriveFields(...) = %v, want <nil>", err)
 	}
 	// Iterate over all the computed fields and check that they're correct
-	signer := MakeSigner(params.TestChainConfig, number)
+	signer := MakeSigner(ctx)
 
 	logIndex := uint(0)
 	for i := range receipts {

@@ -173,7 +173,7 @@ func (b *SimulatedBackend) StorageAt(ctx context.Context, contract common.Addres
 
 // TransactionReceipt returns the receipt of a transaction.
 func (b *SimulatedBackend) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
-	receipt, _, _, _ := rawdb.ReadReceipt(b.database, txHash, b.config)
+	receipt, _, _, _ := rawdb.ReadReceipt(ctx, b.database, txHash)
 	return receipt, nil
 }
 
@@ -482,7 +482,8 @@ func (fb *filterBackend) GetReceipts(ctx context.Context, hash common.Hash) (typ
 	if number == nil {
 		return nil, nil
 	}
-	return rawdb.ReadReceipts(fb.db, hash, *number, fb.bc.Config()), nil
+	ctx = fb.bc.Config().WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+	return rawdb.ReadReceipts(ctx, fb.db, hash, *number), nil
 }
 
 func (fb *filterBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*types.Log, error) {
@@ -490,7 +491,8 @@ func (fb *filterBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*ty
 	if number == nil {
 		return nil, nil
 	}
-	receipts := rawdb.ReadReceipts(fb.db, hash, *number, fb.bc.Config())
+	ctx = fb.bc.Config().WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+	receipts := rawdb.ReadReceipts(ctx, fb.db, hash, *number)
 	if receipts == nil {
 		return nil, nil
 	}

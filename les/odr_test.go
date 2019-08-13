@@ -60,10 +60,12 @@ func odrGetReceipts(ctx context.Context, db ethdb.Database, config *params.Chain
 	var receipts types.Receipts
 	if bc != nil {
 		if number := rawdb.ReadHeaderNumber(db, bhash); number != nil {
-			receipts = rawdb.ReadReceipts(db, bhash, *number, config)
+			ctx = config.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+			receipts = rawdb.ReadReceipts(ctx, db, bhash, *number)
 		}
 	} else {
 		if number := rawdb.ReadHeaderNumber(db, bhash); number != nil {
+			ctx = config.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
 			receipts, _ = light.GetBlockReceipts(ctx, lc.Odr(), bhash, *number)
 		}
 	}

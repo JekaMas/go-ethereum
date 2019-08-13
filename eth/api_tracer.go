@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/params"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -131,6 +132,8 @@ func (api *PrivateDebugAPI) TraceChain(ctx context.Context, start, end rpc.Block
 	if from.Number().Cmp(to.Number()) >= 0 {
 		return nil, fmt.Errorf("end block (#%d) needs to come after start block (#%d)", end, start)
 	}
+
+	ctx = api.eth.blockchain.Config().WithEIPsFlags(ctx, from.Number())
 	return api.traceChain(ctx, from, to, config)
 }
 
@@ -201,13 +204,14 @@ func (api *PrivateDebugAPI) traceChain(ctx context.Context, start, end *types.Bl
 
 			// Fetch and execute the next block trace tasks
 			for task := range tasks {
-				signer := types.MakeSigner(api.eth.blockchain.Config(), task.block.Number())
+				signer := types.MakeSigner(params.WithEIPsBlockFlags(ctx, task.block.Number()))
 
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
 					msg, _ := tx.AsMessage(signer)
 					vmctx := core.NewEVMContext(msg, task.block.Header(), api.eth.blockchain, nil)
 
+					ctx = params.WithEIPsBlockFlags(ctx, task.block.Number())
 					res, err := api.traceTx(ctx, msg, vmctx, task.statedb, config)
 					if err != nil {
 						task.results[i] = &txTraceResult{Error: err.Error()}
@@ -215,7 +219,7 @@ func (api *PrivateDebugAPI) traceChain(ctx context.Context, start, end *types.Bl
 						break
 					}
 					// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-					task.statedb.Finalise(api.eth.blockchain.Config().IsEIP158(task.block.Number()))
+					task.statedb.Finalise(params.GetForkFlag(ctx, params.IsEIP158Enabled))
 					task.results[i] = &txTraceResult{Result: res}
 				}
 				// Stream the result back to the user or abort on teardown
@@ -368,6 +372,7 @@ func (api *PrivateDebugAPI) TraceBlockByNumber(ctx context.Context, number rpc.B
 	if block == nil {
 		return nil, fmt.Errorf("block #%d not found", number)
 	}
+	ctx = api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
 	return api.traceBlock(ctx, block, config)
 }
 
@@ -378,6 +383,7 @@ func (api *PrivateDebugAPI) TraceBlockByHash(ctx context.Context, hash common.Ha
 	if block == nil {
 		return nil, fmt.Errorf("block %#x not found", hash)
 	}
+	ctx = api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
 	return api.traceBlock(ctx, block, config)
 }
 
@@ -388,6 +394,7 @@ func (api *PrivateDebugAPI) TraceBlock(ctx context.Context, blob []byte, config 
 	if err := rlp.Decode(bytes.NewReader(blob), block); err != nil {
 		return nil, fmt.Errorf("could not decode block: %v", err)
 	}
+	ctx = api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
 	return api.traceBlock(ctx, block, config)
 }
 
@@ -408,6 +415,7 @@ func (api *PrivateDebugAPI) TraceBadBlock(ctx context.Context, hash common.Hash,
 	blocks := api.eth.blockchain.BadBlocks()
 	for _, block := range blocks {
 		if block.Hash() == hash {
+			ctx = api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
 			return api.traceBlock(ctx, block, config)
 		}
 	}
@@ -422,6 +430,7 @@ func (api *PrivateDebugAPI) StandardTraceBlockToFile(ctx context.Context, hash c
 	if block == nil {
 		return nil, fmt.Errorf("block %#x not found", hash)
 	}
+	ctx = api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
 	return api.standardTraceBlockToFile(ctx, block, config)
 }
 
@@ -432,6 +441,7 @@ func (api *PrivateDebugAPI) StandardTraceBadBlockToFile(ctx context.Context, has
 	blocks := api.eth.blockchain.BadBlocks()
 	for _, block := range blocks {
 		if block.Hash() == hash {
+			ctx = api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
 			return api.standardTraceBlockToFile(ctx, block, config)
 		}
 	}
@@ -443,7 +453,7 @@ func (api *PrivateDebugAPI) StandardTraceBadBlockToFile(ctx context.Context, has
 // per transaction, dependent on the requestd tracer.
 func (api *PrivateDebugAPI) traceBlock(ctx context.Context, block *types.Block, config *TraceConfig) ([]*txTraceResult, error) {
 	// Create the parent state database
-	if err := api.eth.engine.VerifyHeader(api.eth.blockchain, block.Header(), true); err != nil {
+	if err := api.eth.engine.VerifyHeader(ctx, api.eth.blockchain, block.Header(), true); err != nil {
 		return nil, err
 	}
 	parent := api.eth.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1)
@@ -460,7 +470,7 @@ func (api *PrivateDebugAPI) traceBlock(ctx context.Context, block *types.Block, 
 	}
 	// Execute all the transaction contained within the block concurrently
 	var (
-		signer = types.MakeSigner(api.eth.blockchain.Config(), block.Number())
+		signer = types.MakeSigner(ctx)
 
 		txs     = block.Transactions()
 		results = make([]*txTraceResult, len(txs))
@@ -531,7 +541,7 @@ func (api *PrivateDebugAPI) standardTraceBlockToFile(ctx context.Context, block 
 		}
 	}
 	// Create the parent state database
-	if err := api.eth.engine.VerifyHeader(api.eth.blockchain, block.Header(), true); err != nil {
+	if err := api.eth.engine.VerifyHeader(ctx, api.eth.blockchain, block.Header(), true); err != nil {
 		return nil, err
 	}
 	parent := api.eth.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1)
@@ -561,7 +571,7 @@ func (api *PrivateDebugAPI) standardTraceBlockToFile(ctx context.Context, block 
 
 	// Execute transaction, either tracing all or just the requested one
 	var (
-		signer = types.MakeSigner(api.eth.blockchain.Config(), block.Number())
+		signer = types.MakeSigner(ctx)
 		dumps  []string
 	)
 	for i, tx := range block.Transactions() {
@@ -801,7 +811,8 @@ func (api *PrivateDebugAPI) computeTxEnv(blockHash common.Hash, txIndex int, ree
 	}
 
 	// Recompute transactions up to the target index.
-	signer := types.MakeSigner(api.eth.blockchain.Config(), block.Number())
+	ctx := params.NewContextWithBlock(api.eth.blockchain.Config(), block.Number())
+	signer := types.MakeSigner(ctx)
 
 	for idx, tx := range block.Transactions() {
 		// Assemble the transaction call message and return if the requested offset
@@ -817,7 +828,7 @@ func (api *PrivateDebugAPI) computeTxEnv(blockHash common.Hash, txIndex int, ree
 		}
 		// Ensure any modifications are committed to the state
 		// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-		statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number()))
+		statedb.Finalise(params.GetForkFlag(ctx, params.IsEIP158Enabled))
 	}
 	return nil, vm.Context{}, nil, fmt.Errorf("transaction index %d out of range for block %#x", txIndex, blockHash)
 }

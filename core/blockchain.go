@@ -18,6 +18,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -232,7 +233,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	// The first thing the node will do is reconstruct the verification data for
 	// the head block (ethash cache or clique voting snapshot). Might as well do
 	// it in advance.
-	bc.engine.VerifyHeader(bc, bc.CurrentHeader(), true)
+	ctx := chainConfig.WithEIPsFlags(context.Background(), bc.CurrentHeader().Number)
+	bc.engine.VerifyHeader(ctx, bc, bc.CurrentHeader(), true)
 
 	if frozen, err := bc.db.Ancients(); err == nil && frozen > 0 {
 		var (
@@ -749,7 +751,8 @@ func (bc *BlockChain) GetReceiptsByHash(hash common.Hash) types.Receipts {
 	if number == nil {
 		return nil
 	}
-	receipts := rawdb.ReadReceipts(bc.db, hash, *number, bc.chainConfig)
+	ctx := params.NewContextWithBlock(bc.chainConfig, big.NewInt(0).SetUint64(*number))
+	receipts := rawdb.ReadReceipts(ctx, bc.db, hash, *number)
 	if receipts == nil {
 		return nil
 	}
@@ -1034,7 +1037,8 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 				}
 				h := rawdb.ReadCanonicalHash(bc.db, frozen)
 				b := rawdb.ReadBlock(bc.db, h, frozen)
-				size += rawdb.WriteAncientBlock(bc.db, b, rawdb.ReadReceipts(bc.db, h, frozen, bc.chainConfig), rawdb.ReadTd(bc.db, h, frozen))
+				ctx := params.NewContextWithBlock(bc.chainConfig, big.NewInt(0).SetUint64(frozen))
+				size += rawdb.WriteAncientBlock(bc.db, b, rawdb.ReadReceipts(ctx, bc.db, h, frozen), rawdb.ReadTd(bc.db, h, frozen))
 				count += 1
 
 				// Always keep genesis block in active database.
@@ -1450,7 +1454,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 		return 0, nil, nil, nil
 	}
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
-	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number()), chain)
+	ctx := params.NewContextWithBlock(bc.chainConfig, chain[0].Number())
+	senderCacher.recoverFromBlocks(types.MakeSigner(ctx), chain)
 
 	// A queued approach to delivering events. This is generally
 	// faster than direct delivery and requires much less mutex
@@ -1469,7 +1474,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 		headers[i] = block.Header()
 		seals[i] = verifySeals
 	}
-	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
+	abort, results := bc.engine.VerifyHeaders(ctx, bc, headers, seals)
 	defer close(abort)
 
 	// Peek the error for the first block to decide the directing import logic
@@ -1861,7 +1866,8 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 			if number == nil {
 				return
 			}
-			receipts := rawdb.ReadReceipts(bc.db, hash, *number, bc.chainConfig)
+			ctx := params.NewContextWithBlock(bc.chainConfig, big.NewInt(0).SetUint64(*number))
+			receipts := rawdb.ReadReceipts(ctx, bc.db, hash, *number)
 			for _, receipt := range receipts {
 				for _, log := range receipt.Logs {
 					l := *log

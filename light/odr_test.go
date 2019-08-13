@@ -121,8 +121,9 @@ func odrGetReceipts(ctx context.Context, db ethdb.Database, bc *core.BlockChain,
 	var receipts types.Receipts
 	if bc != nil {
 		number := rawdb.ReadHeaderNumber(db, bhash)
+		ctx = bc.Config().WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
 		if number != nil {
-			receipts = rawdb.ReadReceipts(db, bhash, *number, bc.Config())
+			receipts = rawdb.ReadReceipts(ctx, db, bhash, *number)
 		}
 	} else {
 		number := rawdb.ReadHeaderNumber(db, bhash)

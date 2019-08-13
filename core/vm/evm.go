@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"context"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -88,6 +89,16 @@ type Context struct {
 	BlockNumber *big.Int       // Provides information for NUMBER
 	Time        *big.Int       // Provides information for TIME
 	Difficulty  *big.Int       // Provides information for DIFFICULTY
+}
+
+type configKey int
+
+const (
+	ContextKey configKey = iota
+)
+
+func WithContext(ctx context.Context, c Context) context.Context {
+	return context.WithValue(ctx, ContextKey, c)
 }
 
 // EVM is the Ethereum Virtual Machine base object and provides

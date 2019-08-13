@@ -306,11 +306,13 @@ func (pool *TxPool) setNewHead(head *types.Header) {
 	ctx, cancel := context.WithTimeout(context.Background(), blockCheckTimeout)
 	defer cancel()
 
+	ctx = pool.config.WithEIPsFlags(ctx, head.Number)
+
 	txc, _ := pool.reorgOnNewHead(ctx, head)
 	m, r := txc.getLists()
 	pool.relay.NewHead(pool.head, m, r)
-	pool.homestead = pool.config.IsHomestead(head.Number)
-	pool.signer = types.MakeSigner(pool.config, head.Number)
+	pool.homestead = params.GetForkFlag(ctx, params.IsHomesteadEnabled)
+	pool.signer = types.MakeSigner(ctx)
 }
 
 // Stop stops the light transaction pool

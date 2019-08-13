@@ -17,6 +17,7 @@
 package core
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -53,6 +54,7 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 		header  = block.Header()
 		gaspool = new(GasPool).AddGas(block.GasLimit())
 	)
+	ctx := params.NewContextWithBlock(p.config, block.Number())
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		// If block precaching was interrupted, abort
@@ -61,7 +63,7 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 		}
 		// Block precaching permitted to continue, execute the transaction
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		if err := precacheTransaction(p.config, p.bc, nil, gaspool, statedb, header, tx, cfg); err != nil {
+		if err := precacheTransaction(ctx, p.config, p.bc, nil, gaspool, statedb, header, tx, cfg); err != nil {
 			return // Ugh, something went horribly wrong, bail out
 		}
 	}
@@ -70,9 +72,9 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 // precacheTransaction attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment. The goal is not to execute
 // the transaction successfully, rather to warm up touched data slots.
-func precacheTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gaspool *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, cfg vm.Config) error {
+func precacheTransaction(ctx context.Context, config *params.ChainConfig, bc ChainContext, author *common.Address, gaspool *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, cfg vm.Config) error {
 	// Convert the transaction into an executable message and pre-cache its sender
-	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
+	msg, err := tx.AsMessage(types.MakeSigner(ctx))
 	if err != nil {
 		return err
 	}

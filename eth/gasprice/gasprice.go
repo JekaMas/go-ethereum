@@ -81,6 +81,7 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	gpo.cacheLock.RUnlock()
 
 	head, _ := gpo.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)
+	ctx = gpo.backend.ChainConfig().WithEIPsFlags(ctx, head.Number)
 	headHash := head.Hash()
 	if headHash == lastHead {
 		return lastPrice, nil
@@ -104,7 +105,7 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	exp := 0
 	var blockPrices []*big.Int
 	for sent < gpo.checkBlocks && blockNum > 0 {
-		go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(blockNum))), blockNum, ch)
+		go gpo.getBlockPrices(ctx, types.MakeSigner(ctx), blockNum, ch)
 		sent++
 		exp++
 		blockNum--
@@ -125,7 +126,7 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 			continue
 		}
 		if blockNum > 0 && sent < gpo.maxBlocks {
-			go gpo.getBlockPrices(ctx, types.MakeSigner(gpo.backend.ChainConfig(), big.NewInt(int64(blockNum))), blockNum, ch)
+			go gpo.getBlockPrices(ctx, types.MakeSigner(ctx), blockNum, ch)
 			sent++
 			exp++
 			blockNum--

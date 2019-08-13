@@ -17,6 +17,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 
@@ -56,7 +57,8 @@ func (test *DifficultyTest) Run(config *params.ChainConfig) error {
 		UncleHash:  test.UncleHash,
 	}
 
-	actual := ethash.CalcDifficulty(config, test.CurrentTimestamp, parent)
+	ctx := config.WithEIPsFlags(context.Background(), big.NewInt(0).SetUint64(test.CurrentBlockNumber))
+	actual := ethash.CalcDifficulty(ctx, test.CurrentTimestamp, parent)
 	exp := test.CurrentDifficulty
 
 	if actual.Cmp(exp) != 0 {

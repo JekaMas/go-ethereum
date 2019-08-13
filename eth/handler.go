@@ -153,7 +153,8 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 
 	// Construct the fetcher (short sync)
 	validator := func(header *types.Header) error {
-		return engine.VerifyHeader(blockchain, header, true)
+		ctx := params.NewContextWithBlock(config, header.Number)
+		return engine.VerifyHeader(ctx, blockchain, header, true)
 	}
 	heighter := func() uint64 {
 		return blockchain.CurrentBlock().NumberU64()

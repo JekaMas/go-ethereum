@@ -131,9 +131,12 @@ func testFork(t *testing.T, blockchain *BlockChain, i, n int, full bool, compara
 // testBlockChainImport tries to process a chain of blocks, writing them into
 // the database if successful.
 func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
+	ctx := params.NewContext(blockchain.Config())
+
 	for _, block := range chain {
 		// Try and process the block
-		err := blockchain.engine.VerifyHeader(blockchain, block.Header(), true)
+		ctx = params.WithEIPsBlockFlags(ctx, block.Number())
+		err := blockchain.engine.VerifyHeader(ctx, blockchain, block.Header(), true)
 		if err == nil {
 			err = blockchain.validator.ValidateBody(block)
 		}
@@ -169,9 +172,11 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 // testHeaderChainImport tries to process a chain of header, writing them into
 // the database if successful.
 func testHeaderChainImport(chain []*types.Header, blockchain *BlockChain) error {
+	ctx := params.NewContext(blockchain.Config())
 	for _, header := range chain {
 		// Try and validate the header
-		if err := blockchain.engine.VerifyHeader(blockchain, header, false); err != nil {
+		ctx = params.WithEIPsBlockFlags(ctx, header.Number)
+		if err := blockchain.engine.VerifyHeader(ctx, blockchain, header, false); err != nil {
 			return err
 		}
 		// Manually insert the header into the database, but don't reorganise (allows subsequent testing)
@@ -686,7 +691,16 @@ func TestFastVsFullChains(t *testing.T) {
 		} else if types.CalcUncleHash(fblock.Uncles()) != types.CalcUncleHash(arblock.Uncles()) || types.CalcUncleHash(anblock.Uncles()) != types.CalcUncleHash(arblock.Uncles()) {
 			t.Errorf("block #%d [%x]: uncles mismatch: fastdb %v, ancientdb %v, archivedb %v", num, hash, fblock.Uncles(), anblock, arblock.Uncles())
 		}
-		if freceipts, anreceipts, areceipts := rawdb.ReadReceipts(fastDb, hash, *rawdb.ReadHeaderNumber(fastDb, hash), fast.Config()), rawdb.ReadReceipts(ancientDb, hash, *rawdb.ReadHeaderNumber(ancientDb, hash), fast.Config()), rawdb.ReadReceipts(archiveDb, hash, *rawdb.ReadHeaderNumber(archiveDb, hash), fast.Config()); types.DeriveSha(freceipts) != types.DeriveSha(areceipts) {
+		fastBlock := *rawdb.ReadHeaderNumber(fastDb, hash)
+		fastBlockBig := big.NewInt(0).SetUint64(fastBlock)
+		ctx := params.NewContextWithBlock(fast.Config(), fastBlockBig)
+
+		archiveBlock := *rawdb.ReadHeaderNumber(archiveDb, hash)
+		archiveBlockBig := big.NewInt(0).SetUint64(archiveBlock)
+
+		ancientBlock := *rawdb.ReadHeaderNumber(ancientDb, hash)
+		ancientBlockBig := big.NewInt(0).SetUint64(ancientBlock)
+		if freceipts, anreceipts, areceipts := rawdb.ReadReceipts(ctx, fastDb, hash, *rawdb.ReadHeaderNumber(fastDb, hash)), rawdb.ReadReceipts(params.WithEIPsBlockFlags(ctx, ancientBlockBig), ancientDb, hash, *rawdb.ReadHeaderNumber(ancientDb, hash)), rawdb.ReadReceipts(params.WithEIPsBlockFlags(ctx, archiveBlockBig), archiveDb, hash, *rawdb.ReadHeaderNumber(archiveDb, hash)); types.DeriveSha(freceipts) != types.DeriveSha(areceipts) {
 			t.Errorf("block #%d [%x]: receipts mismatch: fastdb %v, ancientdb %v, archivedb %v", num, hash, freceipts, anreceipts, areceipts)
 		}
 	}
@@ -900,12 +914,13 @@ func TestChainTxReorgs(t *testing.T) {
 		t.Fatalf("failed to insert forked chain: %v", err)
 	}
 
+	ctx := params.NewContext(blockchain.Config())
 	// removed tx
 	for i, tx := range (types.Transactions{pastDrop, freshDrop}) {
 		if txn, _, _, _ := rawdb.ReadTransaction(db, tx.Hash()); txn != nil {
 			t.Errorf("drop %d: tx %v found while shouldn't have been", i, txn)
 		}
-		if rcpt, _, _, _ := rawdb.ReadReceipt(db, tx.Hash(), blockchain.Config()); rcpt != nil {
+		if rcpt, _, _, _ := rawdb.ReadReceipt(ctx, db, tx.Hash()); rcpt != nil {
 			t.Errorf("drop %d: receipt %v found while shouldn't have been", i, rcpt)
 		}
 	}
@@ -914,7 +929,7 @@ func TestChainTxReorgs(t *testing.T) {
 		if txn, _, _, _ := rawdb.ReadTransaction(db, tx.Hash()); txn == nil {
 			t.Errorf("add %d: expected tx to be found", i)
 		}
-		if rcpt, _, _, _ := rawdb.ReadReceipt(db, tx.Hash(), blockchain.Config()); rcpt == nil {
+		if rcpt, _, _, _ := rawdb.ReadReceipt(ctx, db, tx.Hash()); rcpt == nil {
 			t.Errorf("add %d: expected receipt to be found", i)
 		}
 	}
@@ -923,7 +938,7 @@ func TestChainTxReorgs(t *testing.T) {
 		if txn, _, _, _ := rawdb.ReadTransaction(db, tx.Hash()); txn == nil {
 			t.Errorf("share %d: expected tx to be found", i)
 		}
-		if rcpt, _, _, _ := rawdb.ReadReceipt(db, tx.Hash(), blockchain.Config()); rcpt == nil {
+		if rcpt, _, _, _ := rawdb.ReadReceipt(ctx, db, tx.Hash()); rcpt == nil {
 			t.Errorf("share %d: expected receipt to be found", i)
 		}
 	}

@@ -116,9 +116,11 @@ func testFork(t *testing.T, LightChain *LightChain, i, n int, comparator func(td
 // testHeaderChainImport tries to process a chain of header, writing them into
 // the database if successful.
 func testHeaderChainImport(chain []*types.Header, lightchain *LightChain) error {
+	ctx := params.NewContext(lightchain.Config())
 	for _, header := range chain {
 		// Try and validate the header
-		if err := lightchain.engine.VerifyHeader(lightchain.hc, header, true); err != nil {
+		ctx = params.WithEIPsBlockFlags(ctx, header.Number)
+		if err := lightchain.engine.VerifyHeader(ctx, lightchain.hc, header, true); err != nil {
 			return err
 		}
 		// Manually insert the header into the database, but don't reorganize (allows subsequent testing)
