@@ -283,6 +283,7 @@ func (api *PrivateDebugAPI) traceChain(ctx params.ContextWithConfig, start, end 
 				failed = fmt.Errorf("block #%d not found", number)
 				break
 			}
+			ctxWithBlock := ctx.WithEIPsBlockFlags(block.Number())
 			// Send the block over to the concurrent tracers (if not in the fast-forward phase)
 			if number > origin {
 				txs := block.Transactions()
@@ -301,7 +302,7 @@ func (api *PrivateDebugAPI) traceChain(ctx params.ContextWithConfig, start, end 
 				break
 			}
 			// Finalize the state so any modifications are written to the trie
-			root, err := statedb.Commit(api.eth.blockchain.Config().IsEIP158(block.Number()))
+			root, err := statedb.Commit(ctxWithBlock.GetForkFlag(params.IsEIP158Enabled))
 			if err != nil {
 				failed = err
 				break
@@ -466,7 +467,7 @@ func (api *PrivateDebugAPI) traceBlock(ctx params.ContextWithForkFlags, block *t
 	if config != nil && config.Reexec != nil {
 		reexec = *config.Reexec
 	}
-	statedb, err := api.computeStateDB(parent, reexec)
+	statedb, err := api.computeStateDB(ctx.WithEIPsBlockFlags(parent.Number()), parent, reexec)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +555,7 @@ func (api *PrivateDebugAPI) standardTraceBlockToFile(ctx params.ContextWithForkF
 	if config != nil && config.Reexec != nil {
 		reexec = *config.Reexec
 	}
-	statedb, err := api.computeStateDB(parent, reexec)
+	statedb, err := api.computeStateDB(ctx.WithEIPsBlockFlags(parent.Number()), parent, reexec)
 	if err != nil {
 		return nil, err
 	}
@@ -645,7 +646,7 @@ func containsTx(block *types.Block, hash common.Hash) bool {
 // computeStateDB retrieves the state database associated with a certain block.
 // If no state is locally available for the given block, a number of blocks are
 // attempted to be reexecuted to generate the desired state.
-func (api *PrivateDebugAPI) computeStateDB(block *types.Block, reexec uint64) (*state.StateDB, error) {
+func (api *PrivateDebugAPI) computeStateDB(ctx params.ContextWithForkFlags, block *types.Block, reexec uint64) (*state.StateDB, error) {
 	// If we have the state fully available, use that
 	statedb, err := api.eth.blockchain.StateAt(block.Root())
 	if err == nil {
@@ -693,7 +694,7 @@ func (api *PrivateDebugAPI) computeStateDB(block *types.Block, reexec uint64) (*
 			return nil, fmt.Errorf("processing block %d failed: %v", block.NumberU64(), err)
 		}
 		// Finalize the state so any modifications are written to the trie
-		root, err := statedb.Commit(api.eth.blockchain.Config().IsEIP158(block.Number()))
+		root, err := statedb.Commit(ctx.GetForkFlag(params.IsEIP158Enabled))
 		if err != nil {
 			return nil, err
 		}
@@ -804,7 +805,8 @@ func (api *PrivateDebugAPI) computeTxEnv(ctx context.Context, blockHash common.H
 	if parent == nil {
 		return nil, vm.Context{}, nil, fmt.Errorf("parent %#x not found", block.ParentHash())
 	}
-	statedb, err := api.computeStateDB(parent, reexec)
+	ctxWithBlock := api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
+	statedb, err := api.computeStateDB(ctxWithBlock.WithEIPsBlockFlags(parent.Number()), parent, reexec)
 	if err != nil {
 		return nil, vm.Context{}, nil, err
 	}
@@ -814,7 +816,6 @@ func (api *PrivateDebugAPI) computeTxEnv(ctx context.Context, blockHash common.H
 	}
 
 	// Recompute transactions up to the target index.
-	ctxWithBlock := api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
 	signer := types.MakeSigner(ctxWithBlock)
 
 	for idx, tx := range block.Transactions() {

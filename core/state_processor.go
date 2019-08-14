@@ -103,7 +103,7 @@ func ApplyTransaction(ctx params.ContextWithForkFlags, config *params.ChainConfi
 	}
 	// Update the state with pending changes
 	var root []byte
-	if config.IsByzantium(header.Number) {
+	if ctx.GetForkFlag(params.IsByzantiumEnabled) {
 		statedb.Finalise(true)
 	} else {
 		root = statedb.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled)).Bytes()

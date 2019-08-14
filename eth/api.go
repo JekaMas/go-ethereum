@@ -380,8 +380,10 @@ func (api *PrivateDebugAPI) AccountRange(ctx context.Context, start *common.Hash
 	var err error
 	block := api.eth.blockchain.CurrentBlock()
 
+	ctxWithBlock := api.eth.blockchain.Config().WithEIPsFlags(ctx, block.Number())
+
 	if len(block.Transactions()) == 0 {
-		statedb, err = api.computeStateDB(block, defaultTraceReexec)
+		statedb, err = api.computeStateDB(ctxWithBlock, block, defaultTraceReexec)
 		if err != nil {
 			return AccountRangeResult{}, err
 		}
