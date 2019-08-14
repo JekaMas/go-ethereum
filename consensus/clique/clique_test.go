@@ -57,6 +57,8 @@ func TestReimportMirroredState(t *testing.T) {
 	chain, _ := core.NewBlockChain(db, nil, params.AllCliqueProtocolChanges, engine, vm.Config{}, nil)
 	defer chain.Stop()
 
+	ctx := params.NewContext(params.AllCliqueProtocolChanges)
+
 	blocks, _ := core.GenerateChain(params.AllCliqueProtocolChanges, genesis, engine, db, 3, func(i int, block *core.BlockGen) {
 		// The chain maker doesn't have access to a chain, so the difficulty will be
 		// lets unset (nil). Set it here to the correct value.
@@ -69,7 +71,8 @@ func TestReimportMirroredState(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
-			block.AddTxWithChain(chain, tx)
+			ctx = params.WithEIPsBlockFlags(ctx, block.Number())
+			block.AddTxWithChain(ctx, chain, tx)
 		}
 	})
 	for i, block := range blocks {

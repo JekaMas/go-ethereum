@@ -630,7 +630,7 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 		block = api.blockchain.GetBlockByNumber(blockNumber)
 		//fmt.Printf("Account range: %d, txIndex %d, start: %x, maxResults: %d\n", blockNumber, txIndex, common.BigToHash((*big.Int)(addressHash)), maxResults)
 	}
-	ctx = api.chainConfig.WithEIPsFlags(ctx, header.Number)
+	ctx = api.blockchain.Config().WithEIPsFlags(ctx, header.Number)
 
 	parentHeader := api.blockchain.GetHeaderByHash(header.ParentHash)
 	var root common.Hash
@@ -653,9 +653,9 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 		for idx, tx := range block.Transactions() {
 			// Assemble the transaction call message and return if the requested offset
 			msg, _ := tx.AsMessage(signer)
-			context := core.NewEVMContext(msg, block.Header(), api.blockchain, nil)
+			context := core.NewEVMContext(ctx, msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
-			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{})
+			vmenv := vm.NewEVM(context, statedb, vm.Config{})
 			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 				return AccountRangeResult{}, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 			}
@@ -745,7 +745,7 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 		//fmt.Printf("Storage range: %d, txIndex %d, addr: %x, start: %x, maxResults: %d\n",
 		//	blockNumber, txIndex, address, common.BigToHash((*big.Int)(begin)), maxResults)
 	}
-	ctx = api.chainConfig.WithEIPsFlags(ctx, header.Number)
+	ctx = api.blockchain.Config().WithEIPsFlags(ctx, header.Number)
 
 	parentHeader := api.blockchain.GetHeaderByHash(header.ParentHash)
 	var root common.Hash
@@ -768,9 +768,9 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 		for idx, tx := range block.Transactions() {
 			// Assemble the transaction call message and return if the requested offset
 			msg, _ := tx.AsMessage(signer)
-			context := core.NewEVMContext(msg, block.Header(), api.blockchain, nil)
+			context := core.NewEVMContext(ctx, msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
-			vmenv := vm.NewEVM(context, statedb, api.blockchain.Config(), vm.Config{})
+			vmenv := vm.NewEVM(context, statedb, vm.Config{})
 			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 				return StorageRangeResult{}, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 			}

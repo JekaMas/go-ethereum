@@ -18,6 +18,7 @@ package rawdb
 
 import (
 	"context"
+	"github.com/ethereum/go-ethereum/params"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -106,6 +107,7 @@ func ReadReceipt(ctx context.Context, db ethdb.Reader, hash common.Hash) (*types
 		return nil, common.Hash{}, 0, 0
 	}
 	// Read all the receipts from the block and return the one with the matching hash
+	ctx = params.WithEIPsBlockFlags(ctx, big.NewInt(0).SetUint64(*blockNumber))
 	receipts := ReadReceipts(ctx, db, blockHash, *blockNumber)
 	for receiptIndex, receipt := range receipts {
 		if receipt.TxHash == hash {

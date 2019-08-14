@@ -282,6 +282,8 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
+	ctx := params.NewContext(params.TestChainConfig)
+
 	for i := 0; i < b.N; i++ {
 		db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "")
 		if err != nil {
@@ -297,7 +299,7 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 			if full {
 				hash := header.Hash()
 				rawdb.ReadBody(db, hash, n)
-				ctx := params.NewContextWithBlock(chain.Config(), big.NewInt(0).SetUint64(n))
+				ctx = params.WithEIPsBlockFlags(ctx, big.NewInt(0).SetUint64(n))
 				rawdb.ReadReceipts(ctx, db, hash, n, )
 			}
 		}

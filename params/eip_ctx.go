@@ -2,6 +2,7 @@ package params
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 )
 
@@ -46,6 +47,9 @@ var eipFlags = []flag{
 }
 
 func NewContext(c *ChainConfig) context.Context {
+	if c == nil {
+		panic("NewContext(c *ChainConfig)")
+	}
 	return c.WithConfig(context.Background())
 }
 
@@ -69,7 +73,7 @@ func (c *ChainConfig) WithConfig(ctx context.Context) context.Context {
 		ctx = context.WithValue(ctx, eipFlags[i].isEIPFlag, checker)
 	}
 
-	ctx = context.WithValue(ctx, ChainID, c.ChainID)
+	ctx = context.WithValue(ctx, ChainID, getChainID(c.ChainID))
 
 	return ctx
 }
@@ -92,9 +96,20 @@ func (c *ChainConfig) WithEIPsFlags(ctx context.Context, blockNum *big.Int) cont
 	}
 
 	ctx = context.WithValue(ctx, BlockNumber, blockNum)
-	ctx = context.WithValue(ctx, ChainID, c.ChainID)
+	ctx = context.WithValue(ctx, ChainID, getChainID(c.ChainID))
 
 	return ctx
+}
+
+func getChainID(c *big.Int) *big.Int {
+	chainID := big.NewInt(0)
+	if c != nil {
+		chainID.Set(c)
+	} else {
+		//panic("getChainID")
+	}
+
+	return chainID
 }
 
 func WithEIPsBlockFlags(ctx context.Context, blockNum *big.Int) context.Context {
@@ -118,11 +133,13 @@ func withUpdateEIPFlag(ctx context.Context, blockNum *big.Int, eipFlag, isEIPFun
 func GetForkFlag(ctx context.Context, name configKey) bool {
 	b := ctx.Value(name)
 	if b == nil {
+		panic(fmt.Sprint("flag1", name))
 		return false
 	}
 	if valB, ok := b.(bool); ok {
 		return valB
 	}
+	panic("flag2")
 	return false
 }
 
@@ -137,21 +154,25 @@ func GetChainID(ctx context.Context) *big.Int {
 func getBigInt(ctx context.Context, key configKey) *big.Int {
 	b := ctx.Value(key)
 	if b == nil {
+		panic("getBigInt1")
 		return nil
 	}
 	if valB, ok := b.(*big.Int); ok {
 		return valB
 	}
+	panic("getBigInt2")
 	return nil
 }
 
 func getForkFunc(ctx context.Context, name configKey) func(num *big.Int) bool {
 	b := ctx.Value(name)
 	if b == nil {
+		panic("getForkFunc1")
 		return nil
 	}
 	if valB, ok := b.(func(num *big.Int) bool); ok {
 		return valB
 	}
+	panic("getForkFunc1")
 	return nil
 }

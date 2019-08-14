@@ -135,8 +135,9 @@ func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 	state.SetBalance(msg.From(), math.MaxBig256)
 	vmError := func() error { return nil }
 
-	context := core.NewEVMContext(msg, header, b.eth.BlockChain(), nil)
-	return vm.NewEVM(context, state, b.eth.blockchain.Config(), *b.eth.blockchain.GetVMConfig()), vmError, nil
+	ctx = b.eth.blockchain.Config().WithEIPsFlags(ctx, b.eth.BlockChain().CurrentBlock().Number())
+	context := core.NewEVMContext(ctx, msg, header, b.eth.BlockChain(), nil)
+	return vm.NewEVM(context, state, *b.eth.blockchain.GetVMConfig()), vmError, nil
 }
 
 func (b *EthAPIBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent) event.Subscription {
