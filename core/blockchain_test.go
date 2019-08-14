@@ -138,7 +138,7 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 		ctxWithBlock := ctx.WithEIPsBlockFlags(block.Number())
 		err := blockchain.engine.VerifyHeader(ctxWithBlock, blockchain, block.Header(), true)
 		if err == nil {
-			err = blockchain.validator.ValidateBody(block)
+			err = blockchain.validator.ValidateBody(ctxWithBlock, block)
 		}
 		if err != nil {
 			if err == ErrKnownBlock {
@@ -155,7 +155,7 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 			blockchain.reportBlock(block, receipts, err)
 			return err
 		}
-		err = blockchain.validator.ValidateState(block, statedb, receipts, usedGas)
+		err = blockchain.validator.ValidateState(ctxWithBlock, block, statedb, receipts, usedGas)
 		if err != nil {
 			blockchain.reportBlock(block, receipts, err)
 			return err
