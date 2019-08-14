@@ -123,9 +123,7 @@ func (b *SimulatedBackend) rollback() {
 }
 
 // CodeAt returns the code associated with a certain account in the blockchain.
-func (b *SimulatedBackend) CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
-	ctx = b.wrapContext(ctx)
-
+func (b *SimulatedBackend) CodeAt(_ context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -137,9 +135,7 @@ func (b *SimulatedBackend) CodeAt(ctx context.Context, contract common.Address, 
 }
 
 // BalanceAt returns the wei balance of a certain account in the blockchain.
-func (b *SimulatedBackend) BalanceAt(ctx context.Context, contract common.Address, blockNumber *big.Int) (*big.Int, error) {
-	ctx = b.wrapContext(ctx)
-
+func (b *SimulatedBackend) BalanceAt(_ context.Context, contract common.Address, blockNumber *big.Int) (*big.Int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -151,9 +147,7 @@ func (b *SimulatedBackend) BalanceAt(ctx context.Context, contract common.Addres
 }
 
 // NonceAt returns the nonce of a certain account in the blockchain.
-func (b *SimulatedBackend) NonceAt(ctx context.Context, contract common.Address, blockNumber *big.Int) (uint64, error) {
-	ctx = b.wrapContext(ctx)
-
+func (b *SimulatedBackend) NonceAt(_ context.Context, contract common.Address, blockNumber *big.Int) (uint64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -165,9 +159,7 @@ func (b *SimulatedBackend) NonceAt(ctx context.Context, contract common.Address,
 }
 
 // StorageAt returns the value of key in the storage of an account in the blockchain.
-func (b *SimulatedBackend) StorageAt(ctx context.Context, contract common.Address, key common.Hash, blockNumber *big.Int) ([]byte, error) {
-	ctx = b.wrapContext(ctx)
-
+func (b *SimulatedBackend) StorageAt(_ context.Context, contract common.Address, key common.Hash, blockNumber *big.Int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -358,9 +350,9 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 
 	blocks, _ := core.GenerateChain(b.config, b.blockchain.CurrentBlock(), ethash.NewFaker(), b.database, 1, func(number int, block *core.BlockGen) {
 		for _, tx := range b.pendingBlock.Transactions() {
-			block.AddTxWithChain(ctx, b.blockchain, tx)
+			block.AddTxWithChain(ctxWithBlock, b.blockchain, tx)
 		}
-		block.AddTxWithChain(ctx, b.blockchain, tx)
+		block.AddTxWithChain(ctxWithBlock, b.blockchain, tx)
 	})
 	statedb, _ := b.blockchain.State()
 
@@ -374,8 +366,6 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 //
 // TODO(karalabe): Deprecate when the subscription one can return past data too.
 func (b *SimulatedBackend) FilterLogs(ctx context.Context, query ethereum.FilterQuery) ([]types.Log, error) {
-	ctx = b.wrapContext(ctx)
-
 	var filter *filters.Filter
 	if query.BlockHash != nil {
 		// Block filter requested, construct a single-shot filter
@@ -407,9 +397,7 @@ func (b *SimulatedBackend) FilterLogs(ctx context.Context, query ethereum.Filter
 
 // SubscribeFilterLogs creates a background log filtering operation, returning a
 // subscription immediately, which can be used to stream the found events.
-func (b *SimulatedBackend) SubscribeFilterLogs(ctx context.Context, query ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
-	ctx = b.wrapContext(ctx)
-
+func (b *SimulatedBackend) SubscribeFilterLogs(_ context.Context, query ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
 	// Subscribe to contract events
 	sink := make(chan []*types.Log)
 

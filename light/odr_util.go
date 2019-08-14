@@ -153,7 +153,6 @@ func GetBlockReceipts(ctx context.Context, odr OdrBackend, hash common.Hash, num
 			return nil, err
 		}
 		genesis := rawdb.ReadCanonicalHash(odr.Database(), 0)
-
 		config := rawdb.ReadChainConfig(odr.Database(), genesis)
 		ctxWithBlock := config.WithEIPsFlags(ctx, block.Number())
 

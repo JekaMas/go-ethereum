@@ -2,8 +2,8 @@ package params
 
 import (
 	"context"
-	"fmt"
 	"math/big"
+	"time"
 )
 
 type configKey int
@@ -53,7 +53,11 @@ type ContextWithForkFlags interface {
 }
 
 type contextWithForkFlags struct {
-	ContextWithConfig
+	contextWithConfig
+}
+
+func newContextWithForkFlags(ctx context.Context) *contextWithForkFlags {
+	return &contextWithForkFlags{contextWithConfig{ctx}}
 }
 
 func NewContextWithBlock(c *ChainConfig, blockNum *big.Int) ContextWithForkFlags {
@@ -65,16 +69,7 @@ func New(ctx context.Context, c *ChainConfig, blockNum *big.Int) ContextWithFork
 }
 
 func (c *ChainConfig) WithEIPsFlags(ctx context.Context, blockNum *big.Int) ContextWithForkFlags {
-	checkers := []func(num *big.Int) bool{
-		c.IsHomestead,
-		c.IsEIP150,
-		c.IsEIP155,
-		c.IsEIP158,
-		c.IsByzantium,
-		c.IsConstantinople,
-		c.IsPetersburg,
-		c.IsEWASM,
-	}
+	checkers := c.getCheckers()
 
 	for i, checker := range checkers {
 		ctx = context.WithValue(ctx, eipFlags[i].eipFlag, checker(blockNum))
@@ -84,19 +79,17 @@ func (c *ChainConfig) WithEIPsFlags(ctx context.Context, blockNum *big.Int) Cont
 	ctx = context.WithValue(ctx, BlockNumber, blockNum)
 	ctx = context.WithValue(ctx, ChainID, getChainID(c.ChainID))
 
-	return contextWithForkFlags{contextWithConfig{ctx}}
+	return newContextWithForkFlags(ctx)
 }
 
 func (ctx contextWithForkFlags) GetForkFlag(name configKey) bool {
 	b := ctx.Value(name)
 	if b == nil {
-		panic(fmt.Sprint("flag1", name))
 		return false
 	}
 	if valB, ok := b.(bool); ok {
 		return valB
 	}
-	panic("flag2")
 	return false
 }
 
@@ -104,28 +97,45 @@ func (ctx contextWithForkFlags) GetBlockNumber() *big.Int {
 	return getBigInt(ctx, BlockNumber)
 }
 
+func WithCancel(ctx contextWithForkFlags) (ContextWithForkFlags, context.CancelFunc) {
+	ctxWithCancel, cancel := context.WithCancel(ctx.Context)
+
+	return newContextWithForkFlags(ctxWithCancel), cancel
+}
+
+func WithValue(ctx contextWithForkFlags, key, val interface{}) ContextWithForkFlags {
+	ctxWithValue := context.WithValue(ctx.Context, key, val)
+	return newContextWithForkFlags(ctxWithValue)
+}
+
+func WithTimeout(ctx contextWithForkFlags, timeout time.Duration) (ContextWithForkFlags, context.CancelFunc) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Context, timeout)
+	return newContextWithForkFlags(ctxWithTimeout), cancel
+}
+
+func WithDeadline(ctx contextWithForkFlags, d time.Time) (ContextWithForkFlags, context.CancelFunc) {
+	ctxWithDeadline, cancel := context.WithDeadline(ctx.Context, d)
+	return newContextWithForkFlags(ctxWithDeadline), cancel
+}
+
 func getBigInt(ctx context.Context, key configKey) *big.Int {
 	b := ctx.Value(key)
 	if b == nil {
-		panic("getBigInt1")
 		return nil
 	}
 	if valB, ok := b.(*big.Int); ok {
 		return valB
 	}
-	panic("getBigInt2")
 	return nil
 }
 
 func getForkFunc(ctx context.Context, name configKey) func(num *big.Int) bool {
 	b := ctx.Value(name)
 	if b == nil {
-		panic("getForkFunc1")
 		return nil
 	}
 	if valB, ok := b.(func(num *big.Int) bool); ok {
 		return valB
 	}
-	panic("getForkFunc1")
 	return nil
 }
