@@ -20,6 +20,7 @@ package graphql
 import (
 	"context"
 	"errors"
+	"github.com/ethereum/go-ethereum/params"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -997,7 +998,8 @@ func (r *Resolver) SendRawTransaction(ctx context.Context, args struct{ Data hex
 	if err := rlp.DecodeBytes(args.Data, tx); err != nil {
 		return common.Hash{}, err
 	}
-	hash, err := ethapi.SubmitTransaction(ctx, r.backend, tx)
+
+	hash, err := ethapi.SubmitTransaction(params.New(ctx, r.backend.ChainConfig(), r.backend.CurrentBlock().Number()), r.backend, tx)
 	return hash, err
 }
 

@@ -144,15 +144,15 @@ func TestPrestateTracerCreate2(t *testing.T) {
 	*/
 	origin, _ := signer.Sender(tx)
 	context := vm.Context{
-		Context:     params.NewContextWithBlock(params.MainnetChainConfig, big.NewInt(8000000)),
-		CanTransfer: core.CanTransfer,
-		Transfer:    core.Transfer,
-		Origin:      origin,
-		Coinbase:    common.Address{},
-		Time:        new(big.Int).SetUint64(5),
-		Difficulty:  big.NewInt(0x30000),
-		GasLimit:    uint64(6000000),
-		GasPrice:    big.NewInt(1),
+		ContextWithForkFlags: params.NewContextWithBlock(params.MainnetChainConfig, big.NewInt(8000000)),
+		CanTransfer:          core.CanTransfer,
+		Transfer:             core.Transfer,
+		Origin:               origin,
+		Coinbase:             common.Address{},
+		Time:                 new(big.Int).SetUint64(5),
+		Difficulty:           big.NewInt(0x30000),
+		GasLimit:             uint64(6000000),
+		GasPrice:             big.NewInt(1),
 	}
 	alloc := core.GenesisAlloc{}
 
@@ -233,15 +233,15 @@ func TestCallTracer(t *testing.T) {
 			origin, _ := signer.Sender(tx)
 
 			context := vm.Context{
-				Context:     params.NewContextWithBlock(test.Genesis.Config, big.NewInt(0).SetUint64(uint64(test.Context.Number))),
-				CanTransfer: core.CanTransfer,
-				Transfer:    core.Transfer,
-				Origin:      origin,
-				Coinbase:    test.Context.Miner,
-				Time:        new(big.Int).SetUint64(uint64(test.Context.Time)),
-				Difficulty:  (*big.Int)(test.Context.Difficulty),
-				GasLimit:    uint64(test.Context.GasLimit),
-				GasPrice:    tx.GasPrice(),
+				ContextWithForkFlags: params.NewContextWithBlock(test.Genesis.Config, big.NewInt(0).SetUint64(uint64(test.Context.Number))),
+				CanTransfer:          core.CanTransfer,
+				Transfer:             core.Transfer,
+				Origin:               origin,
+				Coinbase:             test.Context.Miner,
+				Time:                 new(big.Int).SetUint64(uint64(test.Context.Time)),
+				Difficulty:           (*big.Int)(test.Context.Difficulty),
+				GasLimit:             uint64(test.Context.GasLimit),
+				GasPrice:             tx.GasPrice(),
 			}
 			statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc)
 

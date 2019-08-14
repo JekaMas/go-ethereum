@@ -199,15 +199,15 @@ func (e *NoRewardEngine) Author(header *types.Header) (common.Address, error) {
 	return e.inner.Author(header)
 }
 
-func (e *NoRewardEngine) VerifyHeader(ctx context.Context, chain consensus.ChainReader, header *types.Header, seal bool) error {
+func (e *NoRewardEngine) VerifyHeader(ctx params.ContextWithForkFlags, chain consensus.ChainReader, header *types.Header, seal bool) error {
 	return e.inner.VerifyHeader(ctx, chain, header, seal)
 }
 
-func (e *NoRewardEngine) VerifyHeaders(ctx context.Context, chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+func (e *NoRewardEngine) VerifyHeaders(ctx params.ContextWithConfig, chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
 	return e.inner.VerifyHeaders(ctx, chain, headers, seals)
 }
 
-func (e *NoRewardEngine) VerifyUncles(ctx context.Context, chain consensus.ChainReader, block *types.Block) error {
+func (e *NoRewardEngine) VerifyUncles(ctx params.ContextWithForkFlags, chain consensus.ChainReader, block *types.Block) error {
 	return e.inner.VerifyUncles(ctx, chain, block)
 }
 
@@ -215,7 +215,7 @@ func (e *NoRewardEngine) VerifySeal(chain consensus.ChainReader, header *types.H
 	return e.inner.VerifySeal(chain, header)
 }
 
-func (e *NoRewardEngine) Prepare(ctx context.Context, chain consensus.ChainReader, header *types.Header) error {
+func (e *NoRewardEngine) Prepare(ctx params.ContextWithForkFlags, chain consensus.ChainReader, header *types.Header) error {
 	return e.inner.Prepare(ctx, chain, header)
 }
 
@@ -228,23 +228,23 @@ func (e *NoRewardEngine) accumulateRewards(state *state.StateDB, header *types.H
 	state.AddBalance(header.Coinbase, reward)
 }
 
-func (e *NoRewardEngine) Finalize(ctx context.Context, chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
+func (e *NoRewardEngine) Finalize(ctx params.ContextWithForkFlags, chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header) {
 	if e.rewardsOn {
 		e.inner.Finalize(ctx, chain, header, statedb, txs, uncles)
 	} else {
 		e.accumulateRewards(statedb, header, uncles)
-		header.Root = statedb.IntermediateRoot(params.GetForkFlag(ctx, params.IsEIP158Enabled))
+		header.Root = statedb.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled))
 	}
 }
 
-func (e *NoRewardEngine) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
+func (e *NoRewardEngine) FinalizeAndAssemble(ctx params.ContextWithForkFlags, chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	if e.rewardsOn {
 		return e.inner.FinalizeAndAssemble(ctx, chain, header, statedb, txs, uncles, receipts)
 	} else {
 		e.accumulateRewards(statedb, header, uncles)
-		header.Root = statedb.IntermediateRoot(params.GetForkFlag(ctx, params.IsEIP158Enabled))
+		header.Root = statedb.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled))
 
 		// Header seems complete, assemble into a block and return
 		return types.NewBlock(header, txs, uncles, receipts), nil
@@ -259,7 +259,7 @@ func (e *NoRewardEngine) SealHash(header *types.Header) common.Hash {
 	return e.inner.SealHash(header)
 }
 
-func (e *NoRewardEngine) CalcDifficulty(ctx context.Context, chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+func (e *NoRewardEngine) CalcDifficulty(ctx params.ContextWithForkFlags, chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
 	return e.inner.CalcDifficulty(ctx, chain, time, parent)
 }
 
@@ -417,8 +417,8 @@ func (api *RetestethAPI) SendRawTransaction(ctx context.Context, rawTx hexutil.B
 		// Return nil is not by mistake - some tests include sending transaction where gasLimit overflows uint64
 		return common.Hash{}, nil
 	}
-	ctx = api.chainConfig.WithEIPsFlags(ctx, big.NewInt(int64(api.blockNumber)))
-	signer := types.MakeSigner(ctx)
+	ctxWithBlock := api.chainConfig.WithEIPsFlags(ctx, big.NewInt(int64(api.blockNumber)))
+	signer := types.MakeSigner(ctxWithBlock)
 	sender, err := types.Sender(signer, tx)
 	if err != nil {
 		return common.Hash{}, err
@@ -436,8 +436,8 @@ func (api *RetestethAPI) SendRawTransaction(ctx context.Context, rawTx hexutil.B
 
 func (api *RetestethAPI) MineBlocks(ctx context.Context, number uint64) (bool, error) {
 	for i := 0; i < int(number); i++ {
-		ctx = api.blockchain.Config().WithEIPsFlags(ctx, big.NewInt(int64(api.blockNumber + 1)))
-		if err := api.mineBlock(ctx); err != nil {
+		ctxWithBlock := api.blockchain.Config().WithEIPsFlags(ctx, big.NewInt(int64(api.blockNumber + 1)))
+		if err := api.mineBlock(ctxWithBlock); err != nil {
 			return false, err
 		}
 	}
@@ -445,7 +445,7 @@ func (api *RetestethAPI) MineBlocks(ctx context.Context, number uint64) (bool, e
 	return true, nil
 }
 
-func (api *RetestethAPI) mineBlock(ctx context.Context) error {
+func (api *RetestethAPI) mineBlock(ctx params.ContextWithForkFlags) error {
 	parentHash := rawdb.ReadCanonicalHash(api.ethDb, api.blockNumber)
 	parent := rawdb.ReadBlock(api.ethDb, parentHash, api.blockNumber)
 	var timestamp uint64
@@ -579,8 +579,8 @@ func (api *RetestethAPI) RewindToBlock(ctx context.Context, newHead uint64) (boo
 var emptyListHash common.Hash = common.HexToHash("0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
 
 func (api *RetestethAPI) GetLogHash(ctx context.Context, txHash common.Hash) (common.Hash, error) {
-	ctx = api.chainConfig.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(api.blockNumber))
-	receipt, _, _, _ := rawdb.ReadReceipt(ctx, api.ethDb, txHash)
+	ctxWithBlock := api.chainConfig.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(api.blockNumber))
+	receipt, _, _, _ := rawdb.ReadReceipt(ctxWithBlock, api.ethDb, txHash)
 	if receipt == nil {
 		return emptyListHash, nil
 	} else {
@@ -630,7 +630,7 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 		block = api.blockchain.GetBlockByNumber(blockNumber)
 		//fmt.Printf("Account range: %d, txIndex %d, start: %x, maxResults: %d\n", blockNumber, txIndex, common.BigToHash((*big.Int)(addressHash)), maxResults)
 	}
-	ctx = api.blockchain.Config().WithEIPsFlags(ctx, header.Number)
+	ctxWithBlock := api.blockchain.Config().WithEIPsFlags(ctx, header.Number)
 
 	parentHeader := api.blockchain.GetHeaderByHash(header.ParentHash)
 	var root common.Hash
@@ -649,11 +649,11 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 			return AccountRangeResult{}, err
 		}
 		// Recompute transactions up to the target index.
-		signer := types.MakeSigner(ctx)
+		signer := types.MakeSigner(ctxWithBlock)
 		for idx, tx := range block.Transactions() {
 			// Assemble the transaction call message and return if the requested offset
 			msg, _ := tx.AsMessage(signer)
-			context := core.NewEVMContext(ctx, msg, block.Header(), api.blockchain, nil)
+			context := core.NewEVMContext(ctxWithBlock, msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
 			vmenv := vm.NewEVM(context, statedb, vm.Config{})
 			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
@@ -661,10 +661,10 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 			}
 			// Ensure any modifications are committed to the state
 			// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-			root = statedb.IntermediateRoot(params.GetForkFlag(ctx, params.IsEIP158Enabled))
+			root = statedb.IntermediateRoot(ctxWithBlock.GetForkFlag(params.IsEIP158Enabled))
 			if idx == int(txIndex) {
 				// This is to make sure root can be opened by OpenTrie
-				root, err = statedb.Commit(params.GetForkFlag(ctx, params.IsEIP158Enabled))
+				root, err = statedb.Commit(ctxWithBlock.GetForkFlag(params.IsEIP158Enabled))
 				if err != nil {
 					return AccountRangeResult{}, err
 				}
@@ -745,7 +745,7 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 		//fmt.Printf("Storage range: %d, txIndex %d, addr: %x, start: %x, maxResults: %d\n",
 		//	blockNumber, txIndex, address, common.BigToHash((*big.Int)(begin)), maxResults)
 	}
-	ctx = api.blockchain.Config().WithEIPsFlags(ctx, header.Number)
+	ctxWithBlock := api.blockchain.Config().WithEIPsFlags(ctx, header.Number)
 
 	parentHeader := api.blockchain.GetHeaderByHash(header.ParentHash)
 	var root common.Hash
@@ -764,11 +764,11 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 			return StorageRangeResult{}, err
 		}
 		// Recompute transactions up to the target index.
-		signer := types.MakeSigner(ctx)
+		signer := types.MakeSigner(ctxWithBlock)
 		for idx, tx := range block.Transactions() {
 			// Assemble the transaction call message and return if the requested offset
 			msg, _ := tx.AsMessage(signer)
-			context := core.NewEVMContext(ctx, msg, block.Header(), api.blockchain, nil)
+			context := core.NewEVMContext(ctxWithBlock, msg, block.Header(), api.blockchain, nil)
 			// Not yet the searched for transaction, execute on top of the current state
 			vmenv := vm.NewEVM(context, statedb, vm.Config{})
 			if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
@@ -776,10 +776,10 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 			}
 			// Ensure any modifications are committed to the state
 			// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-			_ = statedb.IntermediateRoot(params.GetForkFlag(ctx, params.IsEIP158Enabled))
+			_ = statedb.IntermediateRoot(ctxWithBlock.GetForkFlag(params.IsEIP158Enabled))
 			if idx == int(txIndex) {
 				// This is to make sure root can be opened by OpenTrie
-				_, err = statedb.Commit(params.GetForkFlag(ctx, params.IsEIP158Enabled))
+				_, err = statedb.Commit(ctxWithBlock.GetForkFlag(params.IsEIP158Enabled))
 				if err != nil {
 					return StorageRangeResult{}, err
 				}

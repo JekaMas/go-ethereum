@@ -18,9 +18,9 @@ package types
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/params"
 	"io"
 	"math/big"
 	"unsafe"
@@ -294,7 +294,7 @@ func (r Receipts) GetRlp(i int) []byte {
 
 // DeriveFields fills the receipts with their computed fields based on consensus
 // data and contextual infos like containing block and transactions.
-func (r Receipts) DeriveFields(ctx context.Context, hash common.Hash, number uint64, txs Transactions) error {
+func (r Receipts) DeriveFields(ctx params.ContextWithForkFlags, hash common.Hash, number uint64, txs Transactions) error {
 	signer := MakeSigner(ctx)
 
 	logIndex := uint(0)

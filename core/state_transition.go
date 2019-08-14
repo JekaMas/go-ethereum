@@ -186,7 +186,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	}
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
-	homestead := params.GetForkFlag(st.evm.Context, params.IsHomesteadEnabled)
+	homestead := st.evm.Context.GetForkFlag(params.IsHomesteadEnabled)
 	contractCreation := msg.To() == nil
 
 	// Pay intrinsic gas

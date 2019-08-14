@@ -135,8 +135,8 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 
 	for _, block := range chain {
 		// Try and process the block
-		ctx = params.WithEIPsBlockFlags(ctx, block.Number())
-		err := blockchain.engine.VerifyHeader(ctx, blockchain, block.Header(), true)
+		ctxWithBlock := ctx.WithEIPsBlockFlags(block.Number())
+		err := blockchain.engine.VerifyHeader(ctxWithBlock, blockchain, block.Header(), true)
 		if err == nil {
 			err = blockchain.validator.ValidateBody(block)
 		}
@@ -175,8 +175,8 @@ func testHeaderChainImport(chain []*types.Header, blockchain *BlockChain) error 
 	ctx := params.NewContext(blockchain.Config())
 	for _, header := range chain {
 		// Try and validate the header
-		ctx = params.WithEIPsBlockFlags(ctx, header.Number)
-		if err := blockchain.engine.VerifyHeader(ctx, blockchain, header, false); err != nil {
+		ctxWithBlock := ctx.WithEIPsBlockFlags(header.Number)
+		if err := blockchain.engine.VerifyHeader(ctxWithBlock, blockchain, header, false); err != nil {
 			return err
 		}
 		// Manually insert the header into the database, but don't reorganise (allows subsequent testing)
@@ -700,7 +700,7 @@ func TestFastVsFullChains(t *testing.T) {
 
 		ancientBlock := *rawdb.ReadHeaderNumber(ancientDb, hash)
 		ancientBlockBig := big.NewInt(0).SetUint64(ancientBlock)
-		if freceipts, anreceipts, areceipts := rawdb.ReadReceipts(ctx, fastDb, hash, *rawdb.ReadHeaderNumber(fastDb, hash)), rawdb.ReadReceipts(params.WithEIPsBlockFlags(ctx, ancientBlockBig), ancientDb, hash, *rawdb.ReadHeaderNumber(ancientDb, hash)), rawdb.ReadReceipts(params.WithEIPsBlockFlags(ctx, archiveBlockBig), archiveDb, hash, *rawdb.ReadHeaderNumber(archiveDb, hash)); types.DeriveSha(freceipts) != types.DeriveSha(areceipts) {
+		if freceipts, anreceipts, areceipts := rawdb.ReadReceipts(ctx, fastDb, hash, *rawdb.ReadHeaderNumber(fastDb, hash)), rawdb.ReadReceipts(ctx.WithEIPsBlockFlags(ancientBlockBig), ancientDb, hash, *rawdb.ReadHeaderNumber(ancientDb, hash)), rawdb.ReadReceipts(ctx.WithEIPsBlockFlags(archiveBlockBig), archiveDb, hash, *rawdb.ReadHeaderNumber(archiveDb, hash)); types.DeriveSha(freceipts) != types.DeriveSha(areceipts) {
 			t.Errorf("block #%d [%x]: receipts mismatch: fastdb %v, ancientdb %v, archivedb %v", num, hash, freceipts, anreceipts, areceipts)
 		}
 	}

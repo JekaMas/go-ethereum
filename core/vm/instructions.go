@@ -694,7 +694,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memor
 		input        = memory.Get(offset.Int64(), size.Int64())
 		gas          = contract.Gas
 	)
-	if params.GetForkFlag(interpreter.evm.Context, params.IsEIP150Enabled) {
+	if interpreter.evm.Context.GetForkFlag(params.IsEIP150Enabled) {
 		gas -= gas / 64
 	}
 
@@ -704,7 +704,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memor
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
 	// ignore this error and pretend the operation was successful.
-	if  params.GetForkFlag(interpreter.evm.Context, params.IsHomesteadEnabled) && suberr == ErrCodeStoreOutOfGas {
+	if  interpreter.evm.Context.GetForkFlag(params.IsHomesteadEnabled) && suberr == ErrCodeStoreOutOfGas {
 		stack.push(interpreter.intPool.getZero())
 	} else if suberr != nil && suberr != ErrCodeStoreOutOfGas {
 		stack.push(interpreter.intPool.getZero())

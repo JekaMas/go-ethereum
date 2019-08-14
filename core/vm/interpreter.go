@@ -91,15 +91,15 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	// we'll set the default jump table.
 	if !cfg.JumpTable[STOP].valid {
 		switch {
-		case params.GetForkFlag(evm.Context, params.IsConstantinopleEnabled):
+		case evm.Context.GetForkFlag(params.IsConstantinopleEnabled):
 			cfg.JumpTable = constantinopleInstructionSet
-		case params.GetForkFlag(evm.Context, params.IsByzantiumEnabled):
+		case evm.Context.GetForkFlag(params.IsByzantiumEnabled):
 			cfg.JumpTable = byzantiumInstructionSet
-		case params.GetForkFlag(evm.Context, params.IsEIP158Enabled):
+		case evm.Context.GetForkFlag(params.IsEIP158Enabled):
 			cfg.JumpTable = spuriousDragonInstructionSet
-		case params.GetForkFlag(evm.Context, params.IsEIP150Enabled):
+		case evm.Context.GetForkFlag(params.IsEIP150Enabled):
 			cfg.JumpTable = tangerineWhistleInstructionSet
-		case params.GetForkFlag(evm.Context, params.IsHomesteadEnabled):
+		case evm.Context.GetForkFlag(params.IsHomesteadEnabled):
 			cfg.JumpTable = homesteadInstructionSet
 		default:
 			cfg.JumpTable = frontierInstructionSet
@@ -202,7 +202,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			return nil, fmt.Errorf("stack limit reached %d (%d)", sLen, operation.maxStack)
 		}
 		// If the operation is valid, enforce and write restrictions
-		if in.readOnly && params.GetForkFlag(in.evm.Context, params.IsByzantiumEnabled) {
+		if in.readOnly && in.evm.Context.GetForkFlag(params.IsByzantiumEnabled) {
 			// If the interpreter is operating in readonly mode, make sure no
 			// state-modifying operation is performed. The 3rd stack item
 			// for a call operation is the value. Transferring value from one
@@ -288,5 +288,5 @@ func (in *EVMInterpreter) CanRun(code []byte) bool {
 }
 
 func (in EVMInterpreter) blockNumber() *big.Int {
-	return params.GetBlockNumber(in.evm)
+	return in.evm.GetBlockNumber()
 }

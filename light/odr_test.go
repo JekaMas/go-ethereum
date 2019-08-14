@@ -121,9 +121,9 @@ func odrGetReceipts(ctx context.Context, db ethdb.Database, bc *core.BlockChain,
 	var receipts types.Receipts
 	if bc != nil {
 		number := rawdb.ReadHeaderNumber(db, bhash)
-		ctx = bc.Config().WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+		ctxWithBlock := bc.Config().WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
 		if number != nil {
-			receipts = rawdb.ReadReceipts(ctx, db, bhash, *number)
+			receipts = rawdb.ReadReceipts(ctxWithBlock, db, bhash, *number)
 		}
 	} else {
 		number := rawdb.ReadHeaderNumber(db, bhash)
@@ -196,8 +196,8 @@ func odrContractCall(ctx context.Context, db ethdb.Database, bc *core.BlockChain
 		// Perform read-only call.
 		st.SetBalance(testBankAddress, math.MaxBig256)
 		msg := callmsg{types.NewMessage(testBankAddress, &testContractAddr, 0, new(big.Int), 1000000, new(big.Int), data, false)}
-		ctx = config.WithEIPsFlags(ctx, header.Number)
-		context := core.NewEVMContext(ctx, msg, header, chain, nil)
+		ctxWithBlock := config.WithEIPsFlags(ctx, header.Number)
+		context := core.NewEVMContext(ctxWithBlock, msg, header, chain, nil)
 		vmenv := vm.NewEVM(context, st, vm.Config{})
 		gp := new(core.GasPool).AddGas(math.MaxUint64)
 		ret, _, _, _ := core.ApplyMessage(vmenv, msg, gp)

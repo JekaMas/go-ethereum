@@ -60,13 +60,13 @@ func odrGetReceipts(ctx context.Context, db ethdb.Database, config *params.Chain
 	var receipts types.Receipts
 	if bc != nil {
 		if number := rawdb.ReadHeaderNumber(db, bhash); number != nil {
-			ctx = config.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
-			receipts = rawdb.ReadReceipts(ctx, db, bhash, *number)
+			ctxWithBlock := config.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+			receipts = rawdb.ReadReceipts(ctxWithBlock, db, bhash, *number)
 		}
 	} else {
 		if number := rawdb.ReadHeaderNumber(db, bhash); number != nil {
-			ctx = config.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
-			receipts, _ = light.GetBlockReceipts(ctx, lc.Odr(), bhash, *number)
+			ctxWithBlock := config.WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+			receipts, _ = light.GetBlockReceipts(ctxWithBlock, lc.Odr(), bhash, *number)
 		}
 	}
 	if receipts == nil {
@@ -128,8 +128,8 @@ func odrContractCall(ctx context.Context, db ethdb.Database, config *params.Chai
 
 				msg := callmsg{types.NewMessage(from.Address(), &testContractAddr, 0, new(big.Int), 100000, new(big.Int), data, false)}
 
-			    ctx = config.WithEIPsFlags(ctx, header.Number)
-				context := core.NewEVMContext(ctx, msg, header, bc, nil)
+				ctxWithBlock := config.WithEIPsFlags(ctx, header.Number)
+				context := core.NewEVMContext(ctxWithBlock, msg, header, bc, nil)
 				vmenv := vm.NewEVM(context, statedb, vm.Config{})
 
 				//vmenv := core.NewEnv(statedb, config, bc, msg, header, vm.Config{})
@@ -142,8 +142,8 @@ func odrContractCall(ctx context.Context, db ethdb.Database, config *params.Chai
 			state := light.NewState(ctx, header, lc.Odr())
 			state.SetBalance(bankAddr, math.MaxBig256)
 			msg := callmsg{types.NewMessage(bankAddr, &testContractAddr, 0, new(big.Int), 100000, new(big.Int), data, false)}
-			ctx = config.WithEIPsFlags(ctx, header.Number)
-			context := core.NewEVMContext(ctx, msg, header, lc, nil)
+			ctxWithBlock := config.WithEIPsFlags(ctx, header.Number)
+			context := core.NewEVMContext(ctxWithBlock, msg, header, lc, nil)
 			vmenv := vm.NewEVM(context, state, vm.Config{})
 			gp := new(core.GasPool).AddGas(math.MaxUint64)
 			ret, _, _, _ := core.ApplyMessage(vmenv, msg, gp)

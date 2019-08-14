@@ -17,7 +17,6 @@
 package core
 
 import (
-	"context"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -87,7 +86,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(ctx context.Context, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
+func ApplyTransaction(ctx params.ContextWithForkFlags, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(ctx))
 	if err != nil {
 		return nil, 0, err
@@ -107,7 +106,7 @@ func ApplyTransaction(ctx context.Context, config *params.ChainConfig, bc ChainC
 	if config.IsByzantium(header.Number) {
 		statedb.Finalise(true)
 	} else {
-		root = statedb.IntermediateRoot(params.GetForkFlag(ctx, params.IsEIP158Enabled)).Bytes()
+		root = statedb.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled)).Bytes()
 	}
 	*usedGas += gas
 

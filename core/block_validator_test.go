@@ -50,7 +50,6 @@ func TestHeaderVerification(t *testing.T) {
 	for i := 0; i < len(blocks); i++ {
 		for j, valid := range []bool{true, false} {
 			var results <-chan error
-			ctx = params.WithEIPsBlockFlags(ctx, headers[i].Number)
 
 			if valid {
 				engine := ethash.NewFaker()
@@ -109,8 +108,6 @@ func testHeaderConcurrentVerification(t *testing.T, threads int) {
 	// also an invalid chain (enough if one arbitrary block is invalid).
 	for i, valid := range []bool{true, false} {
 		var results <-chan error
-
-		ctx = params.WithEIPsBlockFlags(ctx, headers[i].Number)
 
 		if valid {
 			chain, _ := NewBlockChain(testdb, nil, params.TestChainConfig, ethash.NewFaker(), vm.Config{}, nil)

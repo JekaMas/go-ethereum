@@ -17,7 +17,6 @@
 package types
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
@@ -40,12 +39,12 @@ type sigCache struct {
 }
 
 // MakeSigner returns a Signer based on the given chain config and block number.
-func MakeSigner(ctx context.Context) Signer {
+func MakeSigner(ctx params.ContextWithForkFlags) Signer {
 	var signer Signer
 	switch {
-	case params.GetForkFlag(ctx, params.IsEIP155Enabled):
-		signer = NewEIP155Signer(params.GetChainID(ctx))
-	case params.GetForkFlag(ctx, params.IsHomesteadEnabled):
+	case ctx.GetForkFlag(params.IsEIP155Enabled):
+		signer = NewEIP155Signer(ctx.GetChainID())
+	case ctx.GetForkFlag(params.IsHomesteadEnabled):
 		signer = HomesteadSigner{}
 	default:
 		signer = FrontierSigner{}

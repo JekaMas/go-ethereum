@@ -119,8 +119,8 @@ func testHeaderChainImport(chain []*types.Header, lightchain *LightChain) error 
 	ctx := params.NewContext(lightchain.Config())
 	for _, header := range chain {
 		// Try and validate the header
-		ctx = params.WithEIPsBlockFlags(ctx, header.Number)
-		if err := lightchain.engine.VerifyHeader(ctx, lightchain.hc, header, true); err != nil {
+		ctxWithBlock := ctx.WithEIPsBlockFlags(header.Number)
+		if err := lightchain.engine.VerifyHeader(ctxWithBlock, lightchain.hc, header, true); err != nil {
 			return err
 		}
 		// Manually insert the header into the database, but don't reorganize (allows subsequent testing)

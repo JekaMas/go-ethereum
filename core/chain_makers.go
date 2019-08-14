@@ -105,8 +105,8 @@ func (b *BlockGen) AddTxWithChain(ctx context.Context, bc *BlockChain, tx *types
 		b.SetCoinbase(common.Address{})
 	}
 	b.statedb.Prepare(tx.Hash(), common.Hash{}, len(b.txs))
-	ctx = b.config.WithEIPsFlags(ctx, b.header.Number)
-	receipt, _, err := ApplyTransaction(ctx, b.config, bc, &b.header.Coinbase, b.gasPool, b.statedb, b.header, tx, &b.header.GasUsed, vm.Config{})
+	ctxWithBlock := b.config.WithEIPsFlags(ctx, b.header.Number)
+	receipt, _, err := ApplyTransaction(ctxWithBlock, b.config, bc, &b.header.Coinbase, b.gasPool, b.statedb, b.header, tx, &b.header.GasUsed, vm.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -223,7 +223,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			block, _ := b.engine.FinalizeAndAssemble(ctx, chainreader, b.header, statedb, b.txs, b.uncles, b.receipts)
 
 			// Write state changes to db
-			root, err := statedb.Commit(params.GetForkFlag(ctx, params.IsEIP158Enabled))
+			root, err := statedb.Commit(ctx.GetForkFlag(params.IsEIP158Enabled))
 			if err != nil {
 				panic(fmt.Sprintf("state write error: %v", err))
 			}
@@ -247,7 +247,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	return blocks, receipts
 }
 
-func makeHeader(ctx context.Context, chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
+func makeHeader(ctx params.ContextWithForkFlags, chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
 	var time uint64
 	if parent.Time() == 0 {
 		time = 10
@@ -256,7 +256,7 @@ func makeHeader(ctx context.Context, chain consensus.ChainReader, parent *types.
 	}
 
 	return &types.Header{
-		Root:       state.IntermediateRoot(params.GetForkFlag(ctx, params.IsEIP158Enabled)),
+		Root:       state.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled)),
 		ParentHash: parent.Hash(),
 		Coinbase:   parent.Coinbase(),
 		Difficulty: engine.CalcDifficulty(ctx, chain, time, &types.Header{

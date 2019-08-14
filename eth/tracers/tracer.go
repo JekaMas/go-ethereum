@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/params"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -537,7 +536,7 @@ func (jst *Tracer) CaptureState(env *vm.EVM, pc uint64, op vm.OpCode, gas, cost 
 	if jst.err == nil {
 		// Initialize the context if it wasn't done yet
 		if !jst.inited {
-			jst.ctx["block"] = params.GetBlockNumber(env.Context).Uint64()
+			jst.ctx["block"] = env.Context.GetBlockNumber().Uint64()
 			jst.inited = true
 		}
 		// If tracing was interrupted, set the error and stop

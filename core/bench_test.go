@@ -299,8 +299,8 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 			if full {
 				hash := header.Hash()
 				rawdb.ReadBody(db, hash, n)
-				ctx = params.WithEIPsBlockFlags(ctx, big.NewInt(0).SetUint64(n))
-				rawdb.ReadReceipts(ctx, db, hash, n, )
+				ctxWithBlock := ctx.WithEIPsBlockFlags(big.NewInt(0).SetUint64(n))
+				rawdb.ReadReceipts(ctxWithBlock, db, hash, n, )
 			}
 		}
 		chain.Stop()

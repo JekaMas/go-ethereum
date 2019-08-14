@@ -71,8 +71,7 @@ func TestReimportMirroredState(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
-			ctx = params.WithEIPsBlockFlags(ctx, block.Number())
-			block.AddTxWithChain(ctx, chain, tx)
+			block.AddTxWithChain(ctx.WithEIPsBlockFlags(block.Number()), chain, tx)
 		}
 	})
 	for i, block := range blocks {
