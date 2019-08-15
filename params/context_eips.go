@@ -97,24 +97,24 @@ func (ctx contextWithForkFlags) GetBlockNumber() *big.Int {
 	return getBigInt(ctx, BlockNumber)
 }
 
-func WithCancel(ctx contextWithForkFlags) (ContextWithForkFlags, context.CancelFunc) {
-	ctxWithCancel, cancel := context.WithCancel(ctx.Context)
+func WithCancel(ctx ContextWithForkFlags) (ContextWithForkFlags, context.CancelFunc) {
+	ctxWithCancel, cancel := context.WithCancel(ctx.GetContext())
 
 	return newContextWithForkFlags(ctxWithCancel), cancel
 }
 
-func WithValue(ctx contextWithForkFlags, key, val interface{}) ContextWithForkFlags {
-	ctxWithValue := context.WithValue(ctx.Context, key, val)
+func WithValue(ctx ContextWithForkFlags, key, val interface{}) ContextWithForkFlags {
+	ctxWithValue := context.WithValue(ctx.GetContext(), key, val)
 	return newContextWithForkFlags(ctxWithValue)
 }
 
-func WithTimeout(ctx contextWithForkFlags, timeout time.Duration) (ContextWithForkFlags, context.CancelFunc) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Context, timeout)
+func WithTimeout(ctx ContextWithForkFlags, timeout time.Duration) (ContextWithForkFlags, context.CancelFunc) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.GetContext(), timeout)
 	return newContextWithForkFlags(ctxWithTimeout), cancel
 }
 
-func WithDeadline(ctx contextWithForkFlags, d time.Time) (ContextWithForkFlags, context.CancelFunc) {
-	ctxWithDeadline, cancel := context.WithDeadline(ctx.Context, d)
+func WithDeadline(ctx ContextWithForkFlags, d time.Time) (ContextWithForkFlags, context.CancelFunc) {
+	ctxWithDeadline, cancel := context.WithDeadline(ctx.GetContext(), d)
 	return newContextWithForkFlags(ctxWithDeadline), cancel
 }
 

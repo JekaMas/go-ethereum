@@ -8,6 +8,7 @@ import (
 
 type ContextWithConfig interface {
 	context.Context
+	GetContext() context.Context
 	GetChainID() *big.Int
 	WithEIPsBlockFlags(blockNum *big.Int) ContextWithForkFlags
 }
@@ -71,24 +72,28 @@ func (ctx contextWithConfig) GetChainID() *big.Int {
 	return getBigInt(ctx, ChainID)
 }
 
-func ConfigWithCancel(ctx contextWithConfig) (ContextWithConfig, context.CancelFunc) {
-	ctxWithCancel, cancel := context.WithCancel(ctx.Context)
+func (ctx contextWithConfig) GetContext() context.Context {
+	return ctx.Context
+}
+
+func ConfigWithCancel(ctx ContextWithConfig) (ContextWithConfig, context.CancelFunc) {
+	ctxWithCancel, cancel := context.WithCancel(ctx.GetContext())
 
 	return newContextWithConfig(ctxWithCancel), cancel
 }
 
-func ConfigWithValue(ctx contextWithConfig, key, val interface{}) ContextWithConfig {
-	ctxWithValue := context.WithValue(ctx.Context, key, val)
+func ConfigWithValue(ctx ContextWithConfig, key, val interface{}) ContextWithConfig {
+	ctxWithValue := context.WithValue(ctx.GetContext(), key, val)
 	return newContextWithConfig(ctxWithValue)
 }
 
-func ConfigWithTimeout(ctx contextWithConfig, timeout time.Duration) (ContextWithConfig, context.CancelFunc) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx.Context, timeout)
+func ConfigWithTimeout(ctx ContextWithConfig, timeout time.Duration) (ContextWithConfig, context.CancelFunc) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.GetContext(), timeout)
 	return newContextWithConfig(ctxWithTimeout), cancel
 }
 
-func ConfigWithDeadline(ctx contextWithConfig, d time.Time) (ContextWithConfig, context.CancelFunc) {
-	ctxWithDeadline, cancel := context.WithDeadline(ctx.Context, d)
+func ConfigWithDeadline(ctx ContextWithConfig, d time.Time) (ContextWithConfig, context.CancelFunc) {
+	ctxWithDeadline, cancel := context.WithDeadline(ctx.GetContext(), d)
 	return newContextWithConfig(ctxWithDeadline), cancel
 }
 

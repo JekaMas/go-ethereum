@@ -118,7 +118,8 @@ func (b *LesApiBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 }
 
 func (b *LesApiBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
-	return b.eth.txPool.Add(ctx, signedTx)
+	ctxWithBlock := b.eth.chainConfig.WithEIPsFlags(ctx, b.CurrentBlock().Number())
+	return b.eth.txPool.Add(ctxWithBlock, signedTx)
 }
 
 func (b *LesApiBackend) RemoveTx(txHash common.Hash) {

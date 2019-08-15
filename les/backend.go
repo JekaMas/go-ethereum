@@ -140,7 +140,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 		rawdb.WriteChainConfig(chainDb, genesisHash, chainConfig)
 	}
 
-	leth.txPool = light.NewTxPool(leth.chainConfig, leth.blockchain, leth.relay)
+	leth.txPool = light.NewTxPool(params.NewContext(leth.chainConfig), leth.blockchain, leth.relay)
 	leth.ApiBackend = &LesApiBackend{ctx.ExtRPCEnabled(), leth, nil}
 
 	gpoParams := config.GPO

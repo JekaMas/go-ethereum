@@ -49,7 +49,6 @@ var txPermanent = uint64(500)
 // always receive all locally signed transactions in the same order as they are
 // created.
 type TxPool struct {
-	config       *params.ChainConfig
 	signer       types.Signer
 	quit         chan bool
 	txFeed       event.Feed
@@ -86,10 +85,9 @@ type TxRelayBackend interface {
 }
 
 // NewTxPool creates a new light transaction pool
-func NewTxPool(config *params.ChainConfig, chain *LightChain, relay TxRelayBackend) *TxPool {
+func NewTxPool(ctx params.ContextWithConfig, chain *LightChain, relay TxRelayBackend) *TxPool {
 	pool := &TxPool{
-		config:      config,
-		signer:      types.NewEIP155Signer(config.ChainID),
+		signer:      types.NewEIP155Signer(ctx.GetChainID()),
 		nonce:       make(map[common.Address]uint64),
 		pending:     make(map[common.Hash]*types.Transaction),
 		mined:       make(map[common.Hash][]*types.Transaction),
@@ -104,7 +102,7 @@ func NewTxPool(config *params.ChainConfig, chain *LightChain, relay TxRelayBacke
 	}
 	// Subscribe events from blockchain
 	pool.chainHeadSub = pool.chain.SubscribeChainHeadEvent(pool.chainHeadCh)
-	go pool.eventLoop()
+	go pool.eventLoop(ctx)
 
 	return pool
 }
@@ -283,11 +281,12 @@ const blockCheckTimeout = time.Second * 3
 
 // eventLoop processes chain head events and also notifies the tx relay backend
 // about the new head hash and tx state changes
-func (pool *TxPool) eventLoop() {
+func (pool *TxPool) eventLoop(ctx params.ContextWithConfig) {
 	for {
 		select {
 		case ev := <-pool.chainHeadCh:
-			pool.setNewHead(ev.Block.Header())
+			ctxWithBlock := ctx.WithEIPsBlockFlags(ev.Block.Number())
+			pool.setNewHead(ctxWithBlock, ev.Block.Header())
 			// hack in order to avoid hogging the lock; this part will
 			// be replaced by a subsequent PR.
 			time.Sleep(time.Millisecond)
@@ -299,20 +298,18 @@ func (pool *TxPool) eventLoop() {
 	}
 }
 
-func (pool *TxPool) setNewHead(head *types.Header) {
+func (pool *TxPool) setNewHead(ctx params.ContextWithForkFlags, head *types.Header) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), blockCheckTimeout)
+	ctx, cancel := params.WithTimeout(ctx, blockCheckTimeout)
 	defer cancel()
-
-	ctxWithBlock := pool.config.WithEIPsFlags(ctx, head.Number)
 
 	txc, _ := pool.reorgOnNewHead(ctx, head)
 	m, r := txc.getLists()
 	pool.relay.NewHead(pool.head, m, r)
-	pool.homestead = ctxWithBlock.GetForkFlag(params.IsHomesteadEnabled)
-	pool.signer = types.MakeSigner(ctxWithBlock)
+	pool.homestead = ctx.GetForkFlag(params.IsHomesteadEnabled)
+	pool.signer = types.MakeSigner(ctx)
 }
 
 // Stop stops the light transaction pool
@@ -341,7 +338,7 @@ func (pool *TxPool) Stats() (pending int) {
 }
 
 // validateTx checks whether a transaction is valid according to the consensus rules.
-func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error {
+func (pool *TxPool) validateTx(ctx params.ContextWithForkFlags, tx *types.Transaction) error {
 	// Validate sender
 	var (
 		from common.Address
@@ -380,7 +377,7 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	}
 
 	// Should supply enough intrinsic gas
-	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, pool.homestead)
+	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, ctx.GetForkFlag(params.IsHomesteadEnabled))
 	if err != nil {
 		return err
 	}
@@ -392,7 +389,7 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 
 // add validates a new transaction and sets its state pending if processable.
 // It also updates the locally stored nonce if necessary.
-func (pool *TxPool) add(ctx context.Context, tx *types.Transaction) error {
+func (pool *TxPool) add(ctx params.ContextWithForkFlags, tx *types.Transaction) error {
 	hash := tx.Hash()
 
 	if pool.pending[hash] != nil {
@@ -426,7 +423,7 @@ func (pool *TxPool) add(ctx context.Context, tx *types.Transaction) error {
 
 // Add adds a transaction to the pool if valid and passes it to the tx relay
 // backend
-func (pool *TxPool) Add(ctx context.Context, tx *types.Transaction) error {
+func (pool *TxPool) Add(ctx params.ContextWithForkFlags, tx *types.Transaction) error {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
@@ -438,7 +435,6 @@ func (pool *TxPool) Add(ctx context.Context, tx *types.Transaction) error {
 	if err := pool.add(ctx, tx); err != nil {
 		return err
 	}
-	//fmt.Println("Send", tx.Hash())
 	pool.relay.Send(types.Transactions{tx})
 
 	pool.chainDb.Put(tx.Hash().Bytes(), data)
@@ -447,7 +443,7 @@ func (pool *TxPool) Add(ctx context.Context, tx *types.Transaction) error {
 
 // AddTransactions adds all valid transactions to the pool and passes them to
 // the tx relay backend
-func (pool *TxPool) AddBatch(ctx context.Context, txs []*types.Transaction) {
+func (pool *TxPool) AddBatch(ctx params.ContextWithForkFlags, txs []*types.Transaction) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	var sendTx types.Transactions
