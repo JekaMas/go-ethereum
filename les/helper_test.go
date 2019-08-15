@@ -194,7 +194,8 @@ func newTestProtocolManager(lightSync bool, blocks int, odr *LesOdr, indexers []
 		chain = simulation.Blockchain()
 		config := core.DefaultTxPoolConfig
 		config.Journal = ""
-		pool = core.NewTxPool(config, types.NewEIP155Signer(gspec.Config.ChainID), simulation.Blockchain())
+		ctx := params.NewContextWithBlock(gspec.Config, simulation.Blockchain().CurrentBlock().Number())
+		pool = core.NewTxPool(ctx, config, types.NewEIP155Signer(gspec.Config.ChainID), simulation.Blockchain())
 	}
 
 	// Create contract registrar

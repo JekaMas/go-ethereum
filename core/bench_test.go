@@ -41,16 +41,20 @@ func BenchmarkInsertChain_empty_diskdb(b *testing.B) {
 	benchInsertChain(b, true, nil)
 }
 func BenchmarkInsertChain_valueTx_memdb(b *testing.B) {
-	benchInsertChain(b, false, genValueTx(0))
+	ctx := params.NewContextWithBlock(params.TestChainConfig, params.TestChainConfig.HomesteadBlock)
+	benchInsertChain(b, false, genValueTx(ctx, 0))
 }
 func BenchmarkInsertChain_valueTx_diskdb(b *testing.B) {
-	benchInsertChain(b, true, genValueTx(0))
+	ctx := params.NewContextWithBlock(params.TestChainConfig, params.TestChainConfig.HomesteadBlock)
+	benchInsertChain(b, true, genValueTx(ctx, 0))
 }
 func BenchmarkInsertChain_valueTx_100kB_memdb(b *testing.B) {
-	benchInsertChain(b, false, genValueTx(100*1024))
+	ctx := params.NewContextWithBlock(params.TestChainConfig, params.TestChainConfig.HomesteadBlock)
+	benchInsertChain(b, false, genValueTx(ctx, 100*1024))
 }
 func BenchmarkInsertChain_valueTx_100kB_diskdb(b *testing.B) {
-	benchInsertChain(b, true, genValueTx(100*1024))
+	ctx := params.NewContextWithBlock(params.TestChainConfig, params.TestChainConfig.HomesteadBlock)
+	benchInsertChain(b, true, genValueTx(ctx, 100*1024))
 }
 func BenchmarkInsertChain_uncles_memdb(b *testing.B) {
 	benchInsertChain(b, false, genUncles)
@@ -81,11 +85,11 @@ var (
 // genValueTx returns a block generator that includes a single
 // value-transfer transaction with n bytes of extra data in each
 // block.
-func genValueTx(nbytes int) func(int, *BlockGen) {
+func genValueTx(ctx params.ContextWithForkFlags, nbytes int) func(int, *BlockGen) {
 	return func(i int, gen *BlockGen) {
 		toaddr := common.Address{}
 		data := make([]byte, nbytes)
-		gas, _ := IntrinsicGas(data, false, false)
+		gas, _ := IntrinsicGas(ctx, data, false)
 		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(benchRootAddr), toaddr, big.NewInt(1), gas, nil, data), types.HomesteadSigner{}, benchRootKey)
 		gen.AddTx(tx)
 	}

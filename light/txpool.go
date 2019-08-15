@@ -377,7 +377,7 @@ func (pool *TxPool) validateTx(ctx params.ContextWithForkFlags, tx *types.Transa
 	}
 
 	// Should supply enough intrinsic gas
-	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, ctx.GetForkFlag(params.IsHomesteadEnabled))
+	gas, err := core.IntrinsicGas(ctx, tx.Data(), tx.To() == nil)
 	if err != nil {
 		return err
 	}

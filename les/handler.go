@@ -85,8 +85,8 @@ type BlockChain interface {
 }
 
 type txPool interface {
-	AddRemotes(txs []*types.Transaction) []error
-	AddRemotesSync(txs []*types.Transaction) []error
+	AddRemotes(ctx params.ContextWithForkFlags, txs []*types.Transaction) []error
+	AddRemotesSync(ctx params.ContextWithForkFlags, txs []*types.Transaction) []error
 	Status(hashes []common.Hash) []core.TxStatus
 }
 
@@ -1046,8 +1046,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		reqCnt := len(req.Txs)
+		ctx := params.NewContextWithBlock(pm.chainConfig, pm.blockchain.CurrentHeader().Number)
 		if accept(req.ReqID, uint64(reqCnt), MaxTxSend) {
-			go func() {
+			go func(ctx params.ContextWithForkFlags) {
 				stats := make([]light.TxStatus, len(req.Txs))
 				for i, tx := range req.Txs {
 					if i != 0 && !task.waitOrStop() {
@@ -1062,7 +1063,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 						if pm.addTxsSync {
 							addFn = pm.txpool.AddRemotesSync
 						}
-						if errs := addFn([]*types.Transaction{tx}); errs[0] != nil {
+						if errs := addFn(ctx, []*types.Transaction{tx}); errs[0] != nil {
 							stats[i].Error = errs[0].Error()
 							continue
 						}
@@ -1070,7 +1071,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 					}
 				}
 				sendResponse(req.ReqID, uint64(reqCnt), p.ReplyTxStatus(req.ReqID, stats), task.done())
-			}()
+			}(ctx)
 		}
 
 	case GetTxStatusMsg:

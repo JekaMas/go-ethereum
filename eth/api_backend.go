@@ -161,7 +161,8 @@ func (b *EthAPIBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscri
 }
 
 func (b *EthAPIBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
-	return b.eth.txPool.AddLocal(signedTx)
+	ctxWithBlock := b.eth.blockchain.Config().WithEIPsFlags(ctx, b.eth.BlockChain().CurrentBlock().Number())
+	return b.eth.txPool.AddLocal(ctxWithBlock, signedTx)
 }
 
 func (b *EthAPIBackend) GetPoolTransactions() (types.Transactions, error) {

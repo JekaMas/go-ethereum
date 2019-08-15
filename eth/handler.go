@@ -731,7 +731,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			p.MarkTransaction(tx.Hash())
 		}
-		pm.txpool.AddRemotes(txs)
+		ctx := params.NewContextWithBlock(pm.blockchain.Config(), pm.blockchain.CurrentBlock().Number())
+		pm.txpool.AddRemotes(ctx, txs)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)

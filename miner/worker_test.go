@@ -104,7 +104,8 @@ func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine 
 	genesis := gspec.MustCommit(db)
 
 	chain, _ := core.NewBlockChain(db, nil, gspec.Config, engine, vm.Config{}, nil)
-	txpool := core.NewTxPool(testTxPoolConfig, types.NewEIP155Signer(chainConfig.ChainID), chain)
+	ctx := params.NewContextWithBlock(chainConfig, chain.CurrentBlock().Number())
+	txpool := core.NewTxPool(ctx, testTxPoolConfig, types.NewEIP155Signer(chainConfig.ChainID), chain)
 
 	// Generate a small n-block chain and an uncle block for it
 	if n > 0 {
@@ -139,7 +140,8 @@ func (b *testWorkerBackend) PostChainEvents(events []interface{}) {
 
 func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, blocks int) (*worker, *testWorkerBackend) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, blocks)
-	backend.txPool.AddLocals(pendingTxs)
+	ctx := params.NewContextWithBlock(chainConfig, backend.chain.CurrentBlock().Number())
+	backend.txPool.AddLocals(ctx, pendingTxs)
 	w := newWorker(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil)
 	w.setEtherbase(testBankAddress)
 	return w, backend
@@ -167,7 +169,8 @@ func testPendingStateAndBlock(t *testing.T, chainConfig *params.ChainConfig, eng
 	if balance := state.GetBalance(testUserAddress); balance.Cmp(big.NewInt(1000)) != 0 {
 		t.Errorf("account balance mismatch: have %d, want %d", balance, 1000)
 	}
-	b.txPool.AddLocals(newTxs)
+	ctx := params.NewContextWithBlock(chainConfig, block.Number())
+	b.txPool.AddLocals(ctx, newTxs)
 
 	// Ensure the new tx events has been processed
 	time.Sleep(100 * time.Millisecond)
@@ -348,7 +351,8 @@ func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, en
 			t.Error("new task timeout")
 		}
 	}
-	b.txPool.AddLocals(newTxs)
+	ctx := params.NewContextWithBlock(chainConfig, b.chain.CurrentBlock().Number())
+	b.txPool.AddLocals(ctx, newTxs)
 	time.Sleep(time.Second)
 
 	select {

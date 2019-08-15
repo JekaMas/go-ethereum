@@ -18,6 +18,7 @@ package tests
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -45,7 +46,7 @@ type ttFork struct {
 
 func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 
-	validateTx := func(rlpData hexutil.Bytes, signer types.Signer, isHomestead bool) (*common.Address, *common.Hash, error) {
+	validateTx := func(ctx params.ContextWithForkFlags, rlpData hexutil.Bytes, signer types.Signer) (*common.Address, *common.Hash, error) {
 		tx := new(types.Transaction)
 		if err := rlp.DecodeBytes(rlpData, tx); err != nil {
 			return nil, nil, err
@@ -55,7 +56,7 @@ func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 			return nil, nil, err
 		}
 		// Intrinsic gas
-		requiredGas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, isHomestead)
+		requiredGas, err := core.IntrinsicGas(ctx, tx.Data(), tx.To() == nil)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -79,7 +80,15 @@ func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 		{"Byzantium", types.NewEIP155Signer(config.ChainID), tt.Byzantium, true},
 		{"Constantinople", types.NewEIP155Signer(config.ChainID), tt.Constantinople, true},
 	} {
-		sender, txhash, err := validateTx(tt.RLP, testcase.signer, testcase.isHomestead)
+		var ctx params.ContextWithForkFlags
+		notHomesteadBlock := big.NewInt(0).Sub(config.HomesteadBlock, big.NewInt(1))
+		if testcase.isHomestead {
+			ctx = params.NewContextWithBlock(config, config.HomesteadBlock)
+		} else {
+			ctx = params.NewContextWithBlock(config, notHomesteadBlock)
+		}
+
+		sender, txhash, err := validateTx(ctx, tt.RLP, testcase.signer)
 
 		if testcase.fork.Sender == (common.UnprefixedAddress{}) {
 			if err == nil {
