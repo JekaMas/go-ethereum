@@ -39,12 +39,12 @@ type sigCache struct {
 }
 
 // MakeSigner returns a Signer based on the given chain config and block number.
-func MakeSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
+func MakeSigner(ctx params.ContextWithForkFlags) Signer {
 	var signer Signer
 	switch {
-	case config.IsEIP155(blockNumber):
-		signer = NewEIP155Signer(config.ChainID)
-	case config.IsHomestead(blockNumber):
+	case ctx.GetForkFlag(params.IsEIP155Enabled):
+		signer = NewEIP155Signer(ctx.GetChainID())
+	case ctx.GetForkFlag(params.IsHomesteadEnabled):
 		signer = HomesteadSigner{}
 	default:
 		signer = FrontierSigner{}

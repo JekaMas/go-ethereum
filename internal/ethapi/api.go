@@ -374,6 +374,8 @@ func (s *PrivateAccountAPI) signTransaction(ctx context.Context, args *SendTxArg
 // tries to sign it with the key associated with args.To. If the given passwd isn't
 // able to decrypt the key it fails.
 func (s *PrivateAccountAPI) SendTransaction(ctx context.Context, args SendTxArgs, passwd string) (common.Hash, error) {
+	ctxWithBlock := s.b.ChainConfig().WithEIPsFlags(ctx, s.b.CurrentBlock().Number())
+
 	if args.Nonce == nil {
 		// Hold the addresse's mutex around signing to prevent concurrent assignment of
 		// the same nonce to multiple accounts.
@@ -385,7 +387,7 @@ func (s *PrivateAccountAPI) SendTransaction(ctx context.Context, args SendTxArgs
 		log.Warn("Failed transaction send attempt", "from", args.From, "to", args.To, "value", args.Value.ToInt(), "err", err)
 		return common.Hash{}, err
 	}
-	return SubmitTransaction(ctx, s.b, signed)
+	return SubmitTransaction(ctxWithBlock, s.b, signed)
 }
 
 // SignTransaction will create a transaction from the given arguments and
@@ -1391,12 +1393,12 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 }
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
-func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
+func SubmitTransaction(ctx params.ContextWithForkFlags, b Backend, tx *types.Transaction) (common.Hash, error) {
 	if err := b.SendTx(ctx, tx); err != nil {
 		return common.Hash{}, err
 	}
 	if tx.To() == nil {
-		signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
+		signer := types.MakeSigner(ctx)
 		from, err := types.Sender(signer, tx)
 		if err != nil {
 			return common.Hash{}, err
@@ -1412,6 +1414,8 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
+	ctxWithBlock := s.b.ChainConfig().WithEIPsFlags(ctx, s.b.CurrentBlock().Number())
+
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}
 
@@ -1438,7 +1442,7 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	if err != nil {
 		return common.Hash{}, err
 	}
-	return SubmitTransaction(ctx, s.b, signed)
+	return SubmitTransaction(ctxWithBlock, s.b, signed)
 }
 
 // SendRawTransaction will add the signed transaction to the transaction pool.
@@ -1448,7 +1452,8 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, encod
 	if err := rlp.DecodeBytes(encodedTx, tx); err != nil {
 		return common.Hash{}, err
 	}
-	return SubmitTransaction(ctx, s.b, tx)
+	ctxWithBlock := s.b.ChainConfig().WithEIPsFlags(ctx, s.b.CurrentBlock().Number())
+	return SubmitTransaction(ctxWithBlock, s.b, tx)
 }
 
 // Sign calculates an ECDSA signature for:

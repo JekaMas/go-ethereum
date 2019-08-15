@@ -17,13 +17,13 @@
 package rawdb
 
 import (
+	"github.com/ethereum/go-ethereum/params"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -95,7 +95,7 @@ func ReadTransaction(db ethdb.Reader, hash common.Hash) (*types.Transaction, com
 
 // ReadReceipt retrieves a specific transaction receipt from the database, along with
 // its added positional metadata.
-func ReadReceipt(db ethdb.Reader, hash common.Hash, config *params.ChainConfig) (*types.Receipt, common.Hash, uint64, uint64) {
+func ReadReceipt(ctx params.ContextWithConfig, db ethdb.Reader, hash common.Hash) (*types.Receipt, common.Hash, uint64, uint64) {
 	// Retrieve the context of the receipt based on the transaction hash
 	blockNumber := ReadTxLookupEntry(db, hash)
 	if blockNumber == nil {
@@ -106,7 +106,8 @@ func ReadReceipt(db ethdb.Reader, hash common.Hash, config *params.ChainConfig) 
 		return nil, common.Hash{}, 0, 0
 	}
 	// Read all the receipts from the block and return the one with the matching hash
-	receipts := ReadReceipts(db, blockHash, *blockNumber, config)
+	ctxWithBlock := ctx.WithEIPsBlockFlags(big.NewInt(0).SetUint64(*blockNumber))
+	receipts := ReadReceipts(ctxWithBlock, db, blockHash, *blockNumber)
 	for receiptIndex, receipt := range receipts {
 		if receipt.TxHash == hash {
 			return receipt, blockHash, *blockNumber, uint64(receiptIndex)

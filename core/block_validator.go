@@ -30,15 +30,13 @@ import (
 //
 // BlockValidator implements Validator.
 type BlockValidator struct {
-	config *params.ChainConfig // Chain configuration options
 	bc     *BlockChain         // Canonical block chain
 	engine consensus.Engine    // Consensus engine used for validating
 }
 
 // NewBlockValidator returns a new block validator which is safe for re-use
-func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engine consensus.Engine) *BlockValidator {
+func NewBlockValidator(blockchain *BlockChain, engine consensus.Engine) *BlockValidator {
 	validator := &BlockValidator{
-		config: config,
 		engine: engine,
 		bc:     blockchain,
 	}
@@ -48,14 +46,14 @@ func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engin
 // ValidateBody validates the given block's uncles and verifies the block
 // header's transaction and uncle roots. The headers are assumed to be already
 // validated at this point.
-func (v *BlockValidator) ValidateBody(block *types.Block) error {
+func (v *BlockValidator) ValidateBody(ctx params.ContextWithForkFlags, block *types.Block) error {
 	// Check whether the block's known, and if not, that it's linkable
 	if v.bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
 		return ErrKnownBlock
 	}
 	// Header validity is known at this point, check the uncles and transactions
 	header := block.Header()
-	if err := v.engine.VerifyUncles(v.bc, block); err != nil {
+	if err := v.engine.VerifyUncles(ctx, v.bc, block); err != nil {
 		return err
 	}
 	if hash := types.CalcUncleHash(block.Uncles()); hash != header.UncleHash {
@@ -77,7 +75,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // transition, such as amount of used gas, the receipt roots and the state root
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
-func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
+func (v *BlockValidator) ValidateState(ctx params.ContextWithForkFlags, block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
 	header := block.Header()
 	if block.GasUsed() != usedGas {
 		return fmt.Errorf("invalid gas used (remote: %d local: %d)", block.GasUsed(), usedGas)
@@ -95,7 +93,7 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	}
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
-	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
+	if root := statedb.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
 	return nil

@@ -18,6 +18,7 @@ package core
 
 import (
 	"errors"
+	"github.com/ethereum/go-ethereum/params"
 	"io"
 	"os"
 
@@ -56,7 +57,7 @@ func newTxJournal(path string) *txJournal {
 
 // load parses a transaction journal dump from disk, loading its contents into
 // the specified pool.
-func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
+func (journal *txJournal) load(ctx params.ContextWithForkFlags, add func(params.ContextWithForkFlags, []*types.Transaction) []error) error {
 	// Skip the parsing if the journal file doesn't exist at all
 	if _, err := os.Stat(journal.path); os.IsNotExist(err) {
 		return nil
@@ -80,7 +81,7 @@ func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
 	// appropriate progress counters. Then use this method to load all the
 	// journaled transactions in small-ish batches.
 	loadBatch := func(txs types.Transactions) {
-		for _, err := range add(txs) {
+		for _, err := range add(ctx, txs) {
 			if err != nil {
 				log.Debug("Failed to add journaled transaction", "err", err)
 				dropped++

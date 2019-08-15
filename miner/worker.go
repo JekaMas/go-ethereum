@@ -402,10 +402,12 @@ func (w *worker) mainLoop() {
 	defer w.chainHeadSub.Unsubscribe()
 	defer w.chainSideSub.Unsubscribe()
 
+	ctx := params.NewContext(w.chainConfig)
+
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
+			w.commitNewWork(ctx, req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
 			// Short circuit for duplicate side blocks
@@ -425,6 +427,8 @@ func (w *worker) mainLoop() {
 			// add the new uncle block if valid and regenerate a mining block.
 			if w.isRunning() && w.current != nil && w.current.uncles.Cardinality() < 2 {
 				start := time.Now()
+				ctxWithBlock := ctx.WithEIPsBlockFlags(w.current.header.Number)
+
 				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
 					var uncles []*types.Header
 					w.current.uncles.Each(func(item interface{}) bool {
@@ -442,7 +446,7 @@ func (w *worker) mainLoop() {
 						uncles = append(uncles, uncle.Header())
 						return false
 					})
-					w.commit(uncles, nil, true, start)
+					w.commit(ctxWithBlock, uncles, nil, true, start)
 				}
 			}
 
@@ -468,7 +472,9 @@ func (w *worker) mainLoop() {
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
 				tcount := w.current.tcount
-				w.commitTransactions(txset, coinbase, nil)
+
+				ctxWithBlock := ctx.WithEIPsBlockFlags(w.current.header.Number)
+				w.commitTransactions(ctxWithBlock, txset, coinbase, nil)
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
 				if tcount != w.current.tcount {
@@ -478,7 +484,7 @@ func (w *worker) mainLoop() {
 				// If clique is running in dev mode(period is 0), disable
 				// advance sealing here.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					w.commitNewWork(nil, true, time.Now().Unix())
+					w.commitNewWork(ctx, nil, true, time.Now().Unix())
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
@@ -589,7 +595,8 @@ func (w *worker) resultLoop() {
 				logs = append(logs, receipt.Logs...)
 			}
 			// Commit block and state to database.
-			stat, err := w.chain.WriteBlockWithState(block, receipts, task.state)
+			ctx := params.NewContextWithBlock(w.chain.Config(), block.Number())
+			stat, err := w.chain.WriteBlockWithState(ctx, block, receipts, task.state)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -701,10 +708,10 @@ func (w *worker) updateSnapshot() {
 	w.snapshotState = w.current.state.Copy()
 }
 
-func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
+func (w *worker) commitTransaction(ctx params.ContextWithForkFlags, tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 
-	receipt, _, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
+	receipt, _, err := core.ApplyTransaction(ctx, w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
@@ -715,7 +722,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	return receipt.Logs, nil
 }
 
-func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
+func (w *worker) commitTransactions(ctx params.ContextWithForkFlags, txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
 	// Short circuit if current is nil
 	if w.current == nil {
 		return true
@@ -765,7 +772,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		from, _ := types.Sender(w.current.signer, tx)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
-		if tx.Protected() && !w.chainConfig.IsEIP155(w.current.header.Number) {
+		if tx.Protected() && !ctx.GetForkFlag(params.IsEIP155Enabled) {
 			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 
 			txs.Pop()
@@ -774,7 +781,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
-		logs, err := w.commitTransaction(tx, coinbase)
+		logs, err := w.commitTransaction(ctx, tx, coinbase)
 		switch err {
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
@@ -829,7 +836,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 }
 
 // commitNewWork generates several new sealing tasks based on the parent block.
-func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
+func (w *worker) commitNewWork(ctx params.ContextWithConfig, interrupt *int32, noempty bool, timestamp int64) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -854,6 +861,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		Extra:      w.extra,
 		Time:       uint64(timestamp),
 	}
+	ctxWithBlock := ctx.WithEIPsBlockFlags(header.Number)
+
 	// Only set the coinbase if our consensus engine is running (avoid spurious block rewards)
 	if w.isRunning() {
 		if w.coinbase == (common.Address{}) {
@@ -862,7 +871,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 		header.Coinbase = w.coinbase
 	}
-	if err := w.engine.Prepare(w.chain, header); err != nil {
+
+	if err := w.engine.Prepare(ctxWithBlock, w.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}
@@ -918,7 +928,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if !noempty {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
-		w.commit(uncles, nil, false, tstart)
+		w.commit(ctxWithBlock, uncles, nil, false, tstart)
 	}
 
 	// Fill the block with all available pending transactions.
@@ -942,22 +952,22 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
-		if w.commitTransactions(txs, w.coinbase, interrupt) {
+		if w.commitTransactions(ctxWithBlock, txs, w.coinbase, interrupt) {
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
-		if w.commitTransactions(txs, w.coinbase, interrupt) {
+		if w.commitTransactions(ctxWithBlock, txs, w.coinbase, interrupt) {
 			return
 		}
 	}
-	w.commit(uncles, w.fullTaskHook, true, tstart)
+	w.commit(ctxWithBlock, uncles, w.fullTaskHook, true, tstart)
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
-func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+func (w *worker) commit(ctx params.ContextWithForkFlags, uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	// Deep copy receipts here to avoid interaction between different tasks.
 	receipts := make([]*types.Receipt, len(w.current.receipts))
 	for i, l := range w.current.receipts {
@@ -965,7 +975,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		*receipts[i] = *l
 	}
 	s := w.current.state.Copy()
-	block, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, w.current.txs, uncles, w.current.receipts)
+	block, err := w.engine.FinalizeAndAssemble(ctx, w.chain, w.current.header, s, w.current.txs, uncles, w.current.receipts)
 	if err != nil {
 		return err
 	}

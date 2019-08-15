@@ -19,6 +19,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/params"
 	"math"
 	"math/big"
 	"sort"
@@ -32,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 const (
@@ -209,7 +209,6 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 // two states over time as they are received and processed.
 type TxPool struct {
 	config      TxPoolConfig
-	chainconfig *params.ChainConfig
 	chain       blockChain
 	gasPrice    *big.Int
 	txFeed      event.Feed
@@ -246,16 +245,15 @@ type txpoolResetRequest struct {
 
 // NewTxPool creates a new transaction pool to gather, sort and filter inbound
 // transactions from the network.
-func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain) *TxPool {
+func NewTxPool(ctx params.ContextWithConfig, config TxPoolConfig, signer types.EIP155Signer, chain blockChain) *TxPool {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
 		config:          config,
-		chainconfig:     chainconfig,
 		chain:           chain,
-		signer:          types.NewEIP155Signer(chainconfig.ChainID),
+		signer:          signer,
 		pending:         make(map[common.Address]*txList),
 		queue:           make(map[common.Address]*txList),
 		beats:           make(map[common.Address]time.Time),
@@ -274,17 +272,18 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		pool.locals.add(addr)
 	}
 	pool.priced = newTxPricedList(pool.all)
-	pool.reset(nil, chain.CurrentBlock().Header())
+	ctxWithBlock := ctx.WithEIPsBlockFlags(chain.CurrentBlock().Number())
+	pool.reset(ctxWithBlock, nil, chain.CurrentBlock().Header())
 
 	// Start the reorg loop early so it can handle requests generated during journal loading.
 	pool.wg.Add(1)
-	go pool.scheduleReorgLoop()
+	go pool.scheduleReorgLoop(ctxWithBlock)
 
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
 
-		if err := pool.journal.load(pool.AddLocals); err != nil {
+		if err := pool.journal.load(ctxWithBlock, pool.AddLocals); err != nil {
 			log.Warn("Failed to load transaction journal", "err", err)
 		}
 		if err := pool.journal.rotate(pool.local()); err != nil {
@@ -506,7 +505,7 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 
 // validateTx checks whether a transaction is valid according to the consensus
 // rules and adheres to some heuristic limits of the local node (price and size).
-func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
+func (pool *TxPool) validateTx(ctx params.ContextWithForkFlags, tx *types.Transaction, local bool) error {
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
 	if tx.Size() > 32*1024 {
 		return ErrOversizedData
@@ -540,7 +539,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrInsufficientFunds
 	}
 	// Ensure the transaction has more gas than the basic tx fee.
-	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil, true)
+	intrGas, err := IntrinsicGas(ctx, tx.Data(), tx.To() == nil)
 	if err != nil {
 		return err
 	}
@@ -557,7 +556,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 // If a newly added transaction is marked as local, its sending account will be
 // whitelisted, preventing any associated transaction from being dropped out of the pool
 // due to pricing constraints.
-func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err error) {
+func (pool *TxPool) add(ctx params.ContextWithForkFlags, tx *types.Transaction, local bool) (replaced bool, err error) {
 	// If the transaction is already known, discard it
 	hash := tx.Hash()
 	if pool.all.Get(hash) != nil {
@@ -566,7 +565,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	}
 
 	// If the transaction fails basic validation, discard it
-	if err := pool.validateTx(tx, local); err != nil {
+	if err := pool.validateTx(ctx, tx, local); err != nil {
 		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
 		invalidTxMeter.Mark(1)
 		return false, err
@@ -724,14 +723,14 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 //
 // This method is used to add transactions from the RPC API and performs synchronous pool
 // reorganization and event propagation.
-func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
-	return pool.addTxs(txs, !pool.config.NoLocals, true)
+func (pool *TxPool) AddLocals(ctx params.ContextWithForkFlags, txs []*types.Transaction) []error {
+	return pool.addTxs(ctx, txs, !pool.config.NoLocals, true)
 }
 
 // AddLocal enqueues a single local transaction into the pool if it is valid. This is
 // a convenience wrapper aroundd AddLocals.
-func (pool *TxPool) AddLocal(tx *types.Transaction) error {
-	errs := pool.AddLocals([]*types.Transaction{tx})
+func (pool *TxPool) AddLocal(ctx params.ContextWithForkFlags, tx *types.Transaction) error {
+	errs := pool.AddLocals(ctx, []*types.Transaction{tx})
 	return errs[0]
 }
 
@@ -740,18 +739,18 @@ func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 //
 // This method is used to add transactions from the p2p network and does not wait for pool
 // reorganization and internal event propagation.
-func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
-	return pool.addTxs(txs, false, false)
+func (pool *TxPool) AddRemotes(ctx params.ContextWithForkFlags,txs []*types.Transaction) []error {
+	return pool.addTxs(ctx, txs, false, false)
 }
 
 // This is like AddRemotes, but waits for pool reorganization. Tests use this method.
-func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error {
-	return pool.addTxs(txs, false, true)
+func (pool *TxPool) AddRemotesSync(ctx params.ContextWithForkFlags, txs []*types.Transaction) []error {
+	return pool.addTxs(ctx, txs, false, true)
 }
 
 // This is like AddRemotes with a single transaction, but waits for pool reorganization. Tests use this method.
-func (pool *TxPool) addRemoteSync(tx *types.Transaction) error {
-	errs := pool.AddRemotesSync([]*types.Transaction{tx})
+func (pool *TxPool) addRemoteSync(ctx params.ContextWithForkFlags, tx *types.Transaction) error {
+	errs := pool.AddRemotesSync(ctx, []*types.Transaction{tx})
 	return errs[0]
 }
 
@@ -759,20 +758,20 @@ func (pool *TxPool) addRemoteSync(tx *types.Transaction) error {
 // wrapper around AddRemotes.
 //
 // Deprecated: use AddRemotes
-func (pool *TxPool) AddRemote(tx *types.Transaction) error {
-	errs := pool.AddRemotes([]*types.Transaction{tx})
+func (pool *TxPool) AddRemote(ctx params.ContextWithForkFlags, tx *types.Transaction) error {
+	errs := pool.AddRemotes(ctx, []*types.Transaction{tx})
 	return errs[0]
 }
 
 // addTxs attempts to queue a batch of transactions if they are valid.
-func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
+func (pool *TxPool) addTxs(ctx params.ContextWithForkFlags, txs []*types.Transaction, local, sync bool) []error {
 	// Cache senders in transactions before obtaining lock (pool.signer is immutable)
 	for _, tx := range txs {
 		types.Sender(pool.signer, tx)
 	}
 
 	pool.mu.Lock()
-	errs, dirtyAddrs := pool.addTxsLocked(txs, local)
+	errs, dirtyAddrs := pool.addTxsLocked(ctx, txs, local)
 	pool.mu.Unlock()
 
 	done := pool.requestPromoteExecutables(dirtyAddrs)
@@ -784,11 +783,11 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 
 // addTxsLocked attempts to queue a batch of transactions if they are valid.
 // The transaction pool lock must be held.
-func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error, *accountSet) {
+func (pool *TxPool) addTxsLocked(ctx params.ContextWithForkFlags, txs []*types.Transaction, local bool) ([]error, *accountSet) {
 	dirty := newAccountSet(pool.signer)
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
-		replaced, err := pool.add(tx, local)
+		replaced, err := pool.add(ctx, tx, local)
 		errs[i] = err
 		if err == nil && !replaced {
 			dirty.addTx(tx)
@@ -905,7 +904,7 @@ func (pool *TxPool) queueTxEvent(tx *types.Transaction) {
 // scheduleReorgLoop schedules runs of reset and promoteExecutables. Code above should not
 // call those methods directly, but request them being run using requestReset and
 // requestPromoteExecutables instead.
-func (pool *TxPool) scheduleReorgLoop() {
+func (pool *TxPool) scheduleReorgLoop(ctx params.ContextWithConfig) {
 	defer pool.wg.Done()
 
 	var (
@@ -920,7 +919,7 @@ func (pool *TxPool) scheduleReorgLoop() {
 		// Launch next background reorg if needed
 		if curDone == nil && launchNextRun {
 			// Run the background reorg and announcements
-			go pool.runReorg(nextDone, reset, dirtyAccounts, queuedEvents)
+			go pool.runReorg(ctx, nextDone, reset, dirtyAccounts, queuedEvents)
 
 			// Prepare everything for the next round of reorg
 			curDone, nextDone = nextDone, make(chan struct{})
@@ -975,7 +974,7 @@ func (pool *TxPool) scheduleReorgLoop() {
 }
 
 // runReorg runs reset and promoteExecutables on behalf of scheduleReorgLoop.
-func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirtyAccounts *accountSet, events map[common.Address]*txSortedMap) {
+func (pool *TxPool) runReorg(ctx params.ContextWithConfig, done chan struct{}, reset *txpoolResetRequest, dirtyAccounts *accountSet, events map[common.Address]*txSortedMap) {
 	defer close(done)
 
 	var promoteAddrs []common.Address
@@ -985,7 +984,14 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 	pool.mu.Lock()
 	if reset != nil {
 		// Reset from the old head to the new, rescheduling any reorged transactions
-		pool.reset(reset.oldHead, reset.newHead)
+		var ctxWithBlock params.ContextWithForkFlags
+		if reset.newHead == nil {
+			ctxWithBlock = ctx.WithEIPsBlockFlags(big.NewInt(0))
+		} else {
+			ctxWithBlock = ctx.WithEIPsBlockFlags(reset.newHead.Number)
+		}
+
+		pool.reset(ctxWithBlock, reset.oldHead, reset.newHead)
 
 		// Nonces were reset, discard any events that became stale
 		for addr := range events {
@@ -1038,7 +1044,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 
 // reset retrieves the current state of the blockchain and ensures the content
 // of the transaction pool is valid with regard to the chain state.
-func (pool *TxPool) reset(oldHead, newHead *types.Header) {
+func (pool *TxPool) reset(ctx params.ContextWithForkFlags, oldHead, newHead *types.Header) {
 	// If we're reorging an old state, reinject all dropped transactions
 	var reinject types.Transactions
 
@@ -1117,7 +1123,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
 	senderCacher.recover(pool.signer, reinject)
-	pool.addTxsLocked(reinject, false)
+	pool.addTxsLocked(ctx, reinject, false)
 }
 
 // promoteExecutables moves transactions that have become processable from the

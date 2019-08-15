@@ -18,6 +18,7 @@ package eth
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/params"
 	"sync"
 	"testing"
 	"time"
@@ -134,7 +135,8 @@ func testSendTransactions(t *testing.T, protocol int) {
 	for nonce := range alltxs {
 		alltxs[nonce] = newTestTransaction(testAccount, uint64(nonce), txsize)
 	}
-	pm.txpool.AddRemotes(alltxs)
+	ctx := params.NewContextWithBlock(pm.blockchain.Config(), pm.blockchain.CurrentBlock().Number())
+	pm.txpool.AddRemotes(ctx, alltxs)
 
 	// Connect several peers. They should all receive the pending transactions.
 	var wg sync.WaitGroup

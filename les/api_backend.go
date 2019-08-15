@@ -112,12 +112,14 @@ func (b *LesApiBackend) GetTd(hash common.Hash) *big.Int {
 
 func (b *LesApiBackend) GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header) (*vm.EVM, func() error, error) {
 	state.SetBalance(msg.From(), math.MaxBig256)
-	context := core.NewEVMContext(msg, header, b.eth.blockchain, nil)
-	return vm.NewEVM(context, state, b.eth.chainConfig, vm.Config{}), state.Error, nil
+	ctxWithBlock := b.eth.chainConfig.WithEIPsFlags(ctx, header.Number)
+	context := core.NewEVMContext(ctxWithBlock, msg, header, b.eth.blockchain, nil)
+	return vm.NewEVM(context, state, vm.Config{}), state.Error, nil
 }
 
 func (b *LesApiBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
-	return b.eth.txPool.Add(ctx, signedTx)
+	ctxWithBlock := b.eth.chainConfig.WithEIPsFlags(ctx, b.CurrentBlock().Number())
+	return b.eth.txPool.Add(ctxWithBlock, signedTx)
 }
 
 func (b *LesApiBackend) RemoveTx(txHash common.Hash) {

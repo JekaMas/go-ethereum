@@ -44,7 +44,7 @@ type (
 func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, error) {
 	if contract.CodeAddr != nil {
 		precompiles := PrecompiledContractsHomestead
-		if evm.chainRules.IsByzantium {
+		if evm.Context.GetForkFlag(params.IsByzantiumEnabled) {
 			precompiles = PrecompiledContractsByzantium
 		}
 		if p := precompiles[*contract.CodeAddr]; p != nil {
@@ -70,6 +70,7 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 // Context provides the EVM with auxiliary information. Once provided
 // it shouldn't be modified.
 type Context struct {
+	params.ContextWithForkFlags
 	// CanTransfer returns whether the account contains
 	// sufficient ether to transfer the value
 	CanTransfer CanTransferFunc
@@ -85,7 +86,6 @@ type Context struct {
 	// Block information
 	Coinbase    common.Address // Provides information for COINBASE
 	GasLimit    uint64         // Provides information for GASLIMIT
-	BlockNumber *big.Int       // Provides information for NUMBER
 	Time        *big.Int       // Provides information for TIME
 	Difficulty  *big.Int       // Provides information for DIFFICULTY
 }
@@ -107,10 +107,6 @@ type EVM struct {
 	// Depth is the current call stack
 	depth int
 
-	// chainConfig contains information about the current chain
-	chainConfig *params.ChainConfig
-	// chain rules contains the chain rules for the current epoch
-	chainRules params.Rules
 	// virtual machine configuration options used to initialise the
 	// evm.
 	vmConfig Config
@@ -129,17 +125,15 @@ type EVM struct {
 
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
 // only ever be used *once*.
-func NewEVM(ctx Context, statedb StateDB, chainConfig *params.ChainConfig, vmConfig Config) *EVM {
+func NewEVM(ctx Context, statedb StateDB, vmConfig Config) *EVM {
 	evm := &EVM{
 		Context:      ctx,
 		StateDB:      statedb,
 		vmConfig:     vmConfig,
-		chainConfig:  chainConfig,
-		chainRules:   chainConfig.Rules(ctx.BlockNumber),
 		interpreters: make([]Interpreter, 0, 1),
 	}
 
-	if chainConfig.IsEWASM(ctx.BlockNumber) {
+	if ctx.GetForkFlag(params.IsEWASM) {
 		// to be implemented by EVM-C and Wagon PRs.
 		// if vmConfig.EWASMInterpreter != "" {
 		//  extIntOpts := strings.Split(vmConfig.EWASMInterpreter, ":")
@@ -203,10 +197,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	)
 	if !evm.StateDB.Exist(addr) {
 		precompiles := PrecompiledContractsHomestead
-		if evm.chainRules.IsByzantium {
+		if evm.Context.GetForkFlag(params.IsByzantiumEnabled) {
 			precompiles = PrecompiledContractsByzantium
 		}
-		if precompiles[addr] == nil && evm.chainRules.IsEIP158 && value.Sign() == 0 {
+		if precompiles[addr] == nil && evm.Context.GetForkFlag(params.IsEIP158Enabled) && value.Sign() == 0 {
 			// Calling a non existing account, don't do anything, but ping the tracer
 			if evm.vmConfig.Debug && evm.depth == 0 {
 				evm.vmConfig.Tracer.CaptureStart(caller.Address(), addr, false, input, gas, value)
@@ -394,7 +388,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	// Create a new account on the state
 	snapshot := evm.StateDB.Snapshot()
 	evm.StateDB.CreateAccount(address)
-	if evm.chainRules.IsEIP158 {
+	if evm.Context.GetForkFlag(params.IsEIP158Enabled) {
 		evm.StateDB.SetNonce(address, 1)
 	}
 	evm.Transfer(evm.StateDB, caller.Address(), address, value)
@@ -416,7 +410,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	ret, err := run(evm, contract, nil, false)
 
 	// check whether the max code size has been exceeded
-	maxCodeSizeExceeded := evm.chainRules.IsEIP158 && len(ret) > params.MaxCodeSize
+	maxCodeSizeExceeded := evm.Context.GetForkFlag(params.IsEIP158Enabled) && len(ret) > params.MaxCodeSize
 	// if the contract creation ran successfully and no errors were returned
 	// calculate the gas required to store the code. If the code could not
 	// be stored due to not enough gas set an error and let it be handled
@@ -433,7 +427,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	// When an error was returned by the EVM or when setting the creation code
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
-	if maxCodeSizeExceeded || (err != nil && (evm.chainRules.IsHomestead || err != ErrCodeStoreOutOfGas)) {
+	if maxCodeSizeExceeded || (err != nil && (evm.Context.GetForkFlag(params.IsHomesteadEnabled) || err != ErrCodeStoreOutOfGas)) {
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
@@ -465,6 +459,3 @@ func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *
 	contractAddr = crypto.CreateAddress2(caller.Address(), common.BigToHash(salt), codeAndHash.Hash().Bytes())
 	return evm.create(caller, codeAndHash, gas, endowment, contractAddr)
 }
-
-// ChainConfig returns the environment's chain configuration
-func (evm *EVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }

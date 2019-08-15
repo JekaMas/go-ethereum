@@ -123,7 +123,7 @@ func (b *SimulatedBackend) rollback() {
 }
 
 // CodeAt returns the code associated with a certain account in the blockchain.
-func (b *SimulatedBackend) CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
+func (b *SimulatedBackend) CodeAt(_ context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -135,7 +135,7 @@ func (b *SimulatedBackend) CodeAt(ctx context.Context, contract common.Address, 
 }
 
 // BalanceAt returns the wei balance of a certain account in the blockchain.
-func (b *SimulatedBackend) BalanceAt(ctx context.Context, contract common.Address, blockNumber *big.Int) (*big.Int, error) {
+func (b *SimulatedBackend) BalanceAt(_ context.Context, contract common.Address, blockNumber *big.Int) (*big.Int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -147,7 +147,7 @@ func (b *SimulatedBackend) BalanceAt(ctx context.Context, contract common.Addres
 }
 
 // NonceAt returns the nonce of a certain account in the blockchain.
-func (b *SimulatedBackend) NonceAt(ctx context.Context, contract common.Address, blockNumber *big.Int) (uint64, error) {
+func (b *SimulatedBackend) NonceAt(_ context.Context, contract common.Address, blockNumber *big.Int) (uint64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -159,7 +159,7 @@ func (b *SimulatedBackend) NonceAt(ctx context.Context, contract common.Address,
 }
 
 // StorageAt returns the value of key in the storage of an account in the blockchain.
-func (b *SimulatedBackend) StorageAt(ctx context.Context, contract common.Address, key common.Hash, blockNumber *big.Int) ([]byte, error) {
+func (b *SimulatedBackend) StorageAt(_ context.Context, contract common.Address, key common.Hash, blockNumber *big.Int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -173,7 +173,7 @@ func (b *SimulatedBackend) StorageAt(ctx context.Context, contract common.Addres
 
 // TransactionReceipt returns the receipt of a transaction.
 func (b *SimulatedBackend) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
-	receipt, _, _, _ := rawdb.ReadReceipt(b.database, txHash, b.config)
+	receipt, _, _, _ := rawdb.ReadReceipt(b.wrapContext(ctx), b.database, txHash)
 	return receipt, nil
 }
 
@@ -181,7 +181,7 @@ func (b *SimulatedBackend) TransactionReceipt(ctx context.Context, txHash common
 // blockchain. The isPending return value indicates whether the transaction has been
 // mined yet. Note that the transaction may not be part of the canonical chain even if
 // it's not pending.
-func (b *SimulatedBackend) TransactionByHash(ctx context.Context, txHash common.Hash) (*types.Transaction, bool, error) {
+func (b *SimulatedBackend) TransactionByHash(_ context.Context, txHash common.Hash) (*types.Transaction, bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -197,7 +197,7 @@ func (b *SimulatedBackend) TransactionByHash(ctx context.Context, txHash common.
 }
 
 // PendingCodeAt returns the code associated with an account in the pending state.
-func (b *SimulatedBackend) PendingCodeAt(ctx context.Context, contract common.Address) ([]byte, error) {
+func (b *SimulatedBackend) PendingCodeAt(_ context.Context, contract common.Address) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -206,6 +206,8 @@ func (b *SimulatedBackend) PendingCodeAt(ctx context.Context, contract common.Ad
 
 // CallContract executes a contract call.
 func (b *SimulatedBackend) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	ctxWithBlock := b.wrapContext(ctx)
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -216,23 +218,25 @@ func (b *SimulatedBackend) CallContract(ctx context.Context, call ethereum.CallM
 	if err != nil {
 		return nil, err
 	}
-	rval, _, _, err := b.callContract(ctx, call, b.blockchain.CurrentBlock(), state)
+	rval, _, _, err := b.callContract(ctxWithBlock, call, b.blockchain.CurrentBlock(), state)
 	return rval, err
 }
 
 // PendingCallContract executes a contract call on the pending state.
 func (b *SimulatedBackend) PendingCallContract(ctx context.Context, call ethereum.CallMsg) ([]byte, error) {
+	ctxWithBlock := b.wrapContext(ctx)
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	defer b.pendingState.RevertToSnapshot(b.pendingState.Snapshot())
 
-	rval, _, _, err := b.callContract(ctx, call, b.pendingBlock, b.pendingState)
+	rval, _, _, err := b.callContract(ctxWithBlock, call, b.pendingBlock, b.pendingState)
 	return rval, err
 }
 
 // PendingNonceAt implements PendingStateReader.PendingNonceAt, retrieving
 // the nonce currently pending for the account.
-func (b *SimulatedBackend) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
+func (b *SimulatedBackend) PendingNonceAt(_ context.Context, account common.Address) (uint64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -248,6 +252,8 @@ func (b *SimulatedBackend) SuggestGasPrice(ctx context.Context) (*big.Int, error
 // EstimateGas executes the requested code against the currently pending block/state and
 // returns the used amount of gas.
 func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMsg) (uint64, error) {
+	ctxWithBlock := b.wrapContext(ctx)
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -269,7 +275,7 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 		call.Gas = gas
 
 		snapshot := b.pendingState.Snapshot()
-		_, _, failed, err := b.callContract(ctx, call, b.pendingBlock, b.pendingState)
+		_, _, failed, err := b.callContract(ctxWithBlock, call, b.pendingBlock, b.pendingState)
 		b.pendingState.RevertToSnapshot(snapshot)
 
 		if err != nil || failed {
@@ -298,6 +304,8 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 // callContract implements common code between normal and pending contract calls.
 // state is modified during execution, make sure to copy it if necessary.
 func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallMsg, block *types.Block, statedb *state.StateDB) ([]byte, uint64, bool, error) {
+	ctxWithBlock := b.wrapContext(ctx)
+
 	// Ensure message is initialized properly.
 	if call.GasPrice == nil {
 		call.GasPrice = big.NewInt(1)
@@ -314,10 +322,10 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	// Execute the call.
 	msg := callmsg{call}
 
-	evmContext := core.NewEVMContext(msg, block.Header(), b.blockchain, nil)
+	evmContext := core.NewEVMContext(ctxWithBlock, msg, block.Header(), b.blockchain, nil)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmenv := vm.NewEVM(evmContext, statedb, b.config, vm.Config{})
+	vmenv := vm.NewEVM(evmContext, statedb, vm.Config{})
 	gaspool := new(core.GasPool).AddGas(math.MaxUint64)
 
 	return core.NewStateTransition(vmenv, msg, gaspool).TransitionDb()
@@ -326,10 +334,12 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 // SendTransaction updates the pending block to include the given transaction.
 // It panics if the transaction is invalid.
 func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transaction) error {
+	ctxWithBlock := b.wrapContext(ctx)
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	sender, err := types.Sender(types.NewEIP155Signer(b.config.ChainID), tx)
+	sender, err := types.Sender(types.NewEIP155Signer(ctxWithBlock.GetChainID()), tx)
 	if err != nil {
 		panic(fmt.Errorf("invalid transaction: %v", err))
 	}
@@ -340,9 +350,9 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 
 	blocks, _ := core.GenerateChain(b.config, b.blockchain.CurrentBlock(), ethash.NewFaker(), b.database, 1, func(number int, block *core.BlockGen) {
 		for _, tx := range b.pendingBlock.Transactions() {
-			block.AddTxWithChain(b.blockchain, tx)
+			block.AddTxWithChain(ctxWithBlock, b.blockchain, tx)
 		}
-		block.AddTxWithChain(b.blockchain, tx)
+		block.AddTxWithChain(ctxWithBlock, b.blockchain, tx)
 	})
 	statedb, _ := b.blockchain.State()
 
@@ -387,7 +397,7 @@ func (b *SimulatedBackend) FilterLogs(ctx context.Context, query ethereum.Filter
 
 // SubscribeFilterLogs creates a background log filtering operation, returning a
 // subscription immediately, which can be used to stream the found events.
-func (b *SimulatedBackend) SubscribeFilterLogs(ctx context.Context, query ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
+func (b *SimulatedBackend) SubscribeFilterLogs(_ context.Context, query ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
 	// Subscribe to contract events
 	sink := make(chan []*types.Log)
 
@@ -442,6 +452,10 @@ func (b *SimulatedBackend) Blockchain() *core.BlockChain {
 	return b.blockchain
 }
 
+func (b *SimulatedBackend) wrapContext(ctx context.Context) params.ContextWithForkFlags {
+	return b.config.WithEIPsFlags(ctx, b.Blockchain().CurrentBlock().Number())
+}
+
 // callmsg implements core.Message to allow passing it as a transaction simulator.
 type callmsg struct {
 	ethereum.CallMsg
@@ -482,7 +496,8 @@ func (fb *filterBackend) GetReceipts(ctx context.Context, hash common.Hash) (typ
 	if number == nil {
 		return nil, nil
 	}
-	return rawdb.ReadReceipts(fb.db, hash, *number, fb.bc.Config()), nil
+	ctxWithBlock := fb.bc.Config().WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+	return rawdb.ReadReceipts(ctxWithBlock, fb.db, hash, *number), nil
 }
 
 func (fb *filterBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*types.Log, error) {
@@ -490,7 +505,8 @@ func (fb *filterBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*ty
 	if number == nil {
 		return nil, nil
 	}
-	receipts := rawdb.ReadReceipts(fb.db, hash, *number, fb.bc.Config())
+	ctxWithBlock := fb.bc.Config().WithEIPsFlags(ctx, big.NewInt(0).SetUint64(*number))
+	receipts := rawdb.ReadReceipts(ctxWithBlock, fb.db, hash, *number)
 	if receipts == nil {
 		return nil, nil
 	}

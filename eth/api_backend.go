@@ -135,8 +135,9 @@ func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 	state.SetBalance(msg.From(), math.MaxBig256)
 	vmError := func() error { return nil }
 
-	context := core.NewEVMContext(msg, header, b.eth.BlockChain(), nil)
-	return vm.NewEVM(context, state, b.eth.blockchain.Config(), *b.eth.blockchain.GetVMConfig()), vmError, nil
+	ctxWithBlock := b.eth.blockchain.Config().WithEIPsFlags(ctx, b.eth.BlockChain().CurrentBlock().Number())
+	context := core.NewEVMContext(ctxWithBlock, msg, header, b.eth.BlockChain(), nil)
+	return vm.NewEVM(context, state, *b.eth.blockchain.GetVMConfig()), vmError, nil
 }
 
 func (b *EthAPIBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent) event.Subscription {
@@ -160,7 +161,8 @@ func (b *EthAPIBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscri
 }
 
 func (b *EthAPIBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
-	return b.eth.txPool.AddLocal(signedTx)
+	ctxWithBlock := b.eth.blockchain.Config().WithEIPsFlags(ctx, b.eth.BlockChain().CurrentBlock().Number())
+	return b.eth.txPool.AddLocal(ctxWithBlock, signedTx)
 }
 
 func (b *EthAPIBackend) GetPoolTransactions() (types.Transactions, error) {

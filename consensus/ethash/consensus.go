@@ -81,7 +81,7 @@ func (ethash *Ethash) Author(header *types.Header) (common.Address, error) {
 
 // VerifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
-func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+func (ethash *Ethash) VerifyHeader(ctx params.ContextWithForkFlags, chain consensus.ChainReader, header *types.Header, seal bool) error {
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake {
 		return nil
@@ -96,13 +96,13 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainReader, header *types.He
 		return consensus.ErrUnknownAncestor
 	}
 	// Sanity checks passed, do a proper verification
-	return ethash.verifyHeader(chain, header, parent, false, seal)
+	return ethash.verifyHeader(ctx, chain, header, parent, false, seal)
 }
 
 // VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers
 // concurrently. The method returns a quit channel to abort the operations and
 // a results channel to retrieve the async verifications.
-func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+func (ethash *Ethash) VerifyHeaders(ctx params.ContextWithConfig, chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake || len(headers) == 0 {
 		abort, results := make(chan struct{}), make(chan error, len(headers))
@@ -128,7 +128,7 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*type
 	for i := 0; i < workers; i++ {
 		go func() {
 			for index := range inputs {
-				errors[index] = ethash.verifyHeaderWorker(chain, headers, seals, index)
+				errors[index] = ethash.verifyHeaderWorker(ctx, chain, headers, seals, index)
 				done <- index
 			}
 		}()
@@ -164,7 +164,7 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainReader, headers []*type
 	return abort, errorsOut
 }
 
-func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainReader, headers []*types.Header, seals []bool, index int) error {
+func (ethash *Ethash) verifyHeaderWorker(ctx params.ContextWithConfig, chain consensus.ChainReader, headers []*types.Header, seals []bool, index int) error {
 	var parent *types.Header
 	if index == 0 {
 		parent = chain.GetHeader(headers[0].ParentHash, headers[0].Number.Uint64()-1)
@@ -177,12 +177,12 @@ func (ethash *Ethash) verifyHeaderWorker(chain consensus.ChainReader, headers []
 	if chain.GetHeader(headers[index].Hash(), headers[index].Number.Uint64()) != nil {
 		return nil // known block
 	}
-	return ethash.verifyHeader(chain, headers[index], parent, false, seals[index])
+	return ethash.verifyHeader(ctx.WithEIPsBlockFlags(headers[index].Number), chain, headers[index], parent, false, seals[index])
 }
 
 // VerifyUncles verifies that the given block's uncles conform to the consensus
 // rules of the stock Ethereum ethash engine.
-func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+func (ethash *Ethash) VerifyUncles(ctx params.ContextWithForkFlags, chain consensus.ChainReader, block *types.Block) error {
 	// If we're running a full engine faking, accept any input as valid
 	if ethash.config.PowMode == ModeFullFake {
 		return nil
@@ -228,7 +228,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 		if ancestors[uncle.ParentHash] == nil || uncle.ParentHash == block.ParentHash() {
 			return errDanglingUncle
 		}
-		if err := ethash.verifyHeader(chain, uncle, ancestors[uncle.ParentHash], true, true); err != nil {
+		if err := ethash.verifyHeader(ctx, chain, uncle, ancestors[uncle.ParentHash], true, true); err != nil {
 			return err
 		}
 	}
@@ -238,7 +238,7 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 // verifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum ethash engine.
 // See YP section 4.3.4. "Block Header Validity"
-func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *types.Header, uncle bool, seal bool) error {
+func (ethash *Ethash) verifyHeader(ctx params.ContextWithConfig, chain consensus.ChainReader, header, parent *types.Header, uncle bool, seal bool) error {
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra)) > params.MaximumExtraDataSize {
 		return fmt.Errorf("extra-data too long: %d > %d", len(header.Extra), params.MaximumExtraDataSize)
@@ -253,7 +253,8 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		return errZeroBlockTime
 	}
 	// Verify the block's difficulty based in it's timestamp and parent's difficulty
-	expected := ethash.CalcDifficulty(chain, header.Time, parent)
+	ctxWithBlock := ctx.WithEIPsBlockFlags(header.Number)
+	expected := ethash.CalcDifficulty(ctxWithBlock, chain, header.Time, parent)
 
 	if expected.Cmp(header.Difficulty) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
@@ -301,21 +302,20 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
-func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
-	return CalcDifficulty(chain.Config(), time, parent)
+func (ethash *Ethash) CalcDifficulty(ctx params.ContextWithForkFlags, _ consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+	return CalcDifficulty(ctx, time, parent)
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
-func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
-	next := new(big.Int).Add(parent.Number, big1)
+func CalcDifficulty(ctx params.ContextWithForkFlags, time uint64, parent *types.Header) *big.Int {
 	switch {
-	case config.IsConstantinople(next):
+	case ctx.GetForkFlag(params.IsConstantinopleEnabled):
 		return calcDifficultyConstantinople(time, parent)
-	case config.IsByzantium(next):
+	case ctx.GetForkFlag(params.IsByzantiumEnabled):
 		return calcDifficultyByzantium(time, parent)
-	case config.IsHomestead(next):
+	case ctx.GetForkFlag(params.IsHomesteadEnabled):
 		return calcDifficultyHomestead(time, parent)
 	default:
 		return calcDifficultyFrontier(time, parent)
@@ -551,29 +551,29 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainReader, header *types.Head
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the ethash protocol. The changes are done inline.
-func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header) error {
+func (ethash *Ethash) Prepare(ctx params.ContextWithForkFlags, chain consensus.ChainReader, header *types.Header) error {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
-	header.Difficulty = ethash.CalcDifficulty(chain, header.Time, parent)
+	header.Difficulty = ethash.CalcDifficulty(ctx, chain, header.Time, parent)
 	return nil
 }
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
-func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
+func (ethash *Ethash) Finalize(ctx params.ContextWithForkFlags, _ consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles)
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	accumulateRewards(ctx, state, header, uncles)
+	header.Root = state.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled))
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+func (ethash *Ethash) FinalizeAndAssemble(ctx params.ContextWithForkFlags, _ consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles)
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	accumulateRewards(ctx, state, header, uncles)
+	header.Root = state.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled))
 
 	// Header seems complete, assemble into a block and return
 	return types.NewBlock(header, txs, uncles, receipts), nil
@@ -611,13 +611,13 @@ var (
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+func accumulateRewards(ctx params.ContextWithForkFlags, state *state.StateDB, header *types.Header, uncles []*types.Header) {
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
-	if config.IsByzantium(header.Number) {
+	if ctx.GetForkFlag(params.IsByzantiumEnabled) {
 		blockReward = ByzantiumBlockReward
 	}
-	if config.IsConstantinople(header.Number) {
+	if ctx.GetForkFlag(params.IsConstantinopleEnabled) {
 		blockReward = ConstantinopleBlockReward
 	}
 	// Accumulate the rewards for the miner and any included uncles

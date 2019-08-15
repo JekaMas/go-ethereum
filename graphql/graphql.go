@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -997,7 +998,7 @@ func (r *Resolver) SendRawTransaction(ctx context.Context, args struct{ Data hex
 	if err := rlp.DecodeBytes(args.Data, tx); err != nil {
 		return common.Hash{}, err
 	}
-	hash, err := ethapi.SubmitTransaction(ctx, r.backend, tx)
+	hash, err := ethapi.SubmitTransaction(params.New(ctx, r.backend.ChainConfig(), r.backend.CurrentBlock().Number()), r.backend, tx)
 	return hash, err
 }
 

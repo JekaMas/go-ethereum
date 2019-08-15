@@ -17,6 +17,7 @@
 package ethash
 
 import (
+	"context"
 	"encoding/json"
 	"math/big"
 	"os"
@@ -74,7 +75,9 @@ func TestCalcDifficulty(t *testing.T) {
 
 	for name, test := range tests {
 		number := new(big.Int).Sub(test.CurrentBlocknumber, big.NewInt(1))
-		diff := CalcDifficulty(config, test.CurrentTimestamp, &types.Header{
+		ctx := config.WithEIPsFlags(context.Background(), number)
+
+		diff := CalcDifficulty(ctx, test.CurrentTimestamp, &types.Header{
 			Number:     number,
 			Time:       test.ParentTimestamp,
 			Difficulty: test.ParentDifficulty,

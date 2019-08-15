@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // insertStats tracks and reports on block insertion.
@@ -103,7 +104,7 @@ func newInsertIterator(chain types.Blocks, results <-chan error, validator Valid
 
 // next returns the next block in the iterator, along with any potential validation
 // error for that block. When the end is reached, it will return (nil, nil).
-func (it *insertIterator) next() (*types.Block, error) {
+func (it *insertIterator) next(ctx params.ContextWithConfig) (*types.Block, error) {
 	// If we reached the end of the chain, abort
 	if it.index+1 >= len(it.chain) {
 		it.index = len(it.chain)
@@ -118,7 +119,7 @@ func (it *insertIterator) next() (*types.Block, error) {
 		return it.chain[it.index], it.errors[it.index]
 	}
 	// Block header valid, run body validation and return
-	return it.chain[it.index], it.validator.ValidateBody(it.chain[it.index])
+	return it.chain[it.index], it.validator.ValidateBody(ctx.WithEIPsBlockFlags(it.chain[it.index].Number()), it.chain[it.index])
 }
 
 // peek returns the next block in the iterator, along with any potential validation

@@ -144,15 +144,15 @@ func TestPrestateTracerCreate2(t *testing.T) {
 	*/
 	origin, _ := signer.Sender(tx)
 	context := vm.Context{
-		CanTransfer: core.CanTransfer,
-		Transfer:    core.Transfer,
-		Origin:      origin,
-		Coinbase:    common.Address{},
-		BlockNumber: new(big.Int).SetUint64(8000000),
-		Time:        new(big.Int).SetUint64(5),
-		Difficulty:  big.NewInt(0x30000),
-		GasLimit:    uint64(6000000),
-		GasPrice:    big.NewInt(1),
+		ContextWithForkFlags: params.NewContextWithBlock(params.MainnetChainConfig, big.NewInt(8000000)),
+		CanTransfer:          core.CanTransfer,
+		Transfer:             core.Transfer,
+		Origin:               origin,
+		Coinbase:             common.Address{},
+		Time:                 new(big.Int).SetUint64(5),
+		Difficulty:           big.NewInt(0x30000),
+		GasLimit:             uint64(6000000),
+		GasPrice:             big.NewInt(1),
 	}
 	alloc := core.GenesisAlloc{}
 
@@ -175,7 +175,7 @@ func TestPrestateTracerCreate2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create call tracer: %v", err)
 	}
-	evm := vm.NewEVM(context, statedb, params.MainnetChainConfig, vm.Config{Debug: true, Tracer: tracer})
+	evm := vm.NewEVM(context, statedb, vm.Config{Debug: true, Tracer: tracer})
 
 	msg, err := tx.AsMessage(signer)
 	if err != nil {
@@ -228,19 +228,20 @@ func TestCallTracer(t *testing.T) {
 			if err := rlp.DecodeBytes(common.FromHex(test.Input), tx); err != nil {
 				t.Fatalf("failed to parse testcase input: %v", err)
 			}
-			signer := types.MakeSigner(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)))
+			ctx := params.NewContextWithBlock(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)))
+			signer := types.MakeSigner(ctx)
 			origin, _ := signer.Sender(tx)
 
 			context := vm.Context{
-				CanTransfer: core.CanTransfer,
-				Transfer:    core.Transfer,
-				Origin:      origin,
-				Coinbase:    test.Context.Miner,
-				BlockNumber: new(big.Int).SetUint64(uint64(test.Context.Number)),
-				Time:        new(big.Int).SetUint64(uint64(test.Context.Time)),
-				Difficulty:  (*big.Int)(test.Context.Difficulty),
-				GasLimit:    uint64(test.Context.GasLimit),
-				GasPrice:    tx.GasPrice(),
+				ContextWithForkFlags: params.NewContextWithBlock(test.Genesis.Config, big.NewInt(0).SetUint64(uint64(test.Context.Number))),
+				CanTransfer:          core.CanTransfer,
+				Transfer:             core.Transfer,
+				Origin:               origin,
+				Coinbase:             test.Context.Miner,
+				Time:                 new(big.Int).SetUint64(uint64(test.Context.Time)),
+				Difficulty:           (*big.Int)(test.Context.Difficulty),
+				GasLimit:             uint64(test.Context.GasLimit),
+				GasPrice:             tx.GasPrice(),
 			}
 			statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc)
 
@@ -249,7 +250,7 @@ func TestCallTracer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create call tracer: %v", err)
 			}
-			evm := vm.NewEVM(context, statedb, test.Genesis.Config, vm.Config{Debug: true, Tracer: tracer})
+			evm := vm.NewEVM(context, statedb, vm.Config{Debug: true, Tracer: tracer})
 
 			msg, err := tx.AsMessage(signer)
 			if err != nil {

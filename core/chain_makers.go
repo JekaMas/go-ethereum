@@ -17,6 +17,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 
@@ -87,7 +88,8 @@ func (b *BlockGen) SetDifficulty(diff *big.Int) {
 // added. Notably, contract code relying on the BLOCKHASH instruction
 // will panic during execution.
 func (b *BlockGen) AddTx(tx *types.Transaction) {
-	b.AddTxWithChain(nil, tx)
+	ctx := params.NewContextWithBlock(b.config, b.Number())
+	b.AddTxWithChain(ctx, nil, tx)
 }
 
 // AddTxWithChain adds a transaction to the generated block. If no coinbase has
@@ -98,12 +100,13 @@ func (b *BlockGen) AddTx(tx *types.Transaction) {
 // further limitations on the content of transactions that can be
 // added. If contract code relies on the BLOCKHASH instruction,
 // the block in chain will be returned.
-func (b *BlockGen) AddTxWithChain(bc *BlockChain, tx *types.Transaction) {
+func (b *BlockGen) AddTxWithChain(ctx context.Context, bc *BlockChain, tx *types.Transaction) {
 	if b.gasPool == nil {
 		b.SetCoinbase(common.Address{})
 	}
 	b.statedb.Prepare(tx.Hash(), common.Hash{}, len(b.txs))
-	receipt, _, err := ApplyTransaction(b.config, bc, &b.header.Coinbase, b.gasPool, b.statedb, b.header, tx, &b.header.GasUsed, vm.Config{})
+	ctxWithBlock := b.config.WithEIPsFlags(ctx, b.header.Number)
+	receipt, _, err := ApplyTransaction(ctxWithBlock, b.config, bc, &b.header.Coinbase, b.gasPool, b.statedb, b.header, tx, &b.header.GasUsed, vm.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -170,7 +173,9 @@ func (b *BlockGen) OffsetTime(seconds int64) {
 		panic("block time out of range")
 	}
 	chainreader := &fakeChainReader{config: b.config}
-	b.header.Difficulty = b.engine.CalcDifficulty(chainreader, b.header.Time, b.parent.Header())
+
+	ctx := params.NewContextWithBlock(chainreader.Config(), b.header.Number)
+	b.header.Difficulty = b.engine.CalcDifficulty(ctx, chainreader, b.header.Time, b.parent.Header())
 }
 
 // GenerateChain creates a chain of n blocks. The first block's
@@ -193,7 +198,9 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	chainreader := &fakeChainReader{config: config}
 	genblock := func(i int, parent *types.Block, statedb *state.StateDB) (*types.Block, types.Receipts) {
 		b := &BlockGen{i: i, chain: blocks, parent: parent, statedb: statedb, config: config, engine: engine}
-		b.header = makeHeader(chainreader, parent, statedb, b.engine)
+
+		ctx := params.NewContextWithBlock(config, big.NewInt(0).Add(parent.Number(), big.NewInt(1)))
+		b.header = makeHeader(ctx, chainreader, parent, statedb, b.engine)
 
 		// Mutate the state and block according to any hard-fork specs
 		if daoBlock := config.DAOForkBlock; daoBlock != nil {
@@ -213,10 +220,10 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		}
 		if b.engine != nil {
 			// Finalize and seal the block
-			block, _ := b.engine.FinalizeAndAssemble(chainreader, b.header, statedb, b.txs, b.uncles, b.receipts)
+			block, _ := b.engine.FinalizeAndAssemble(ctx, chainreader, b.header, statedb, b.txs, b.uncles, b.receipts)
 
 			// Write state changes to db
-			root, err := statedb.Commit(config.IsEIP158(b.header.Number))
+			root, err := statedb.Commit(ctx.GetForkFlag(params.IsEIP158Enabled))
 			if err != nil {
 				panic(fmt.Sprintf("state write error: %v", err))
 			}
@@ -240,7 +247,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	return blocks, receipts
 }
 
-func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
+func makeHeader(ctx params.ContextWithForkFlags, chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
 	var time uint64
 	if parent.Time() == 0 {
 		time = 10
@@ -249,10 +256,10 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 	}
 
 	return &types.Header{
-		Root:       state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
+		Root:       state.IntermediateRoot(ctx.GetForkFlag(params.IsEIP158Enabled)),
 		ParentHash: parent.Hash(),
 		Coinbase:   parent.Coinbase(),
-		Difficulty: engine.CalcDifficulty(chain, time, &types.Header{
+		Difficulty: engine.CalcDifficulty(ctx, chain, time, &types.Header{
 			Number:     parent.Number(),
 			Time:       time - 10,
 			Difficulty: parent.Difficulty(),

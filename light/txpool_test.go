@@ -17,7 +17,6 @@
 package light
 
 import (
-	"context"
 	"math"
 	"math/big"
 	"testing"
@@ -102,16 +101,18 @@ func TestTxPool(t *testing.T) {
 	}
 	lightchain, _ := NewLightChain(odr, params.TestChainConfig, ethash.NewFullFaker(), nil)
 	txPermanent = 50
-	pool := NewTxPool(params.TestChainConfig, lightchain, relay)
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx := params.NewContext(params.TestChainConfig)
+	pool := NewTxPool(ctx, lightchain, relay)
+	ctx, cancel := params.ConfigWithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
 	for ii, block := range gchain {
 		i := ii + 1
 		s := sentTx(i - 1)
 		e := sentTx(i)
+		ctxWithBlock := ctx.WithEIPsBlockFlags(block.Number())
 		for i := s; i < e; i++ {
-			pool.Add(ctx, testTx[i])
+			pool.Add(ctxWithBlock, testTx[i])
 			got := <-relay.send
 			exp := 1
 			if got != exp {

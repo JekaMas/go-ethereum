@@ -20,6 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // Validator is an interface which defines the standard for block validation. It
@@ -27,11 +28,11 @@ import (
 // done by the specific consensus engines.
 type Validator interface {
 	// ValidateBody validates the given block's content.
-	ValidateBody(block *types.Block) error
+	ValidateBody(ctx params.ContextWithForkFlags, block *types.Block) error
 
 	// ValidateState validates the given statedb and optionally the receipts and
 	// gas used.
-	ValidateState(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error
+	ValidateState(ctx params.ContextWithForkFlags, block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error
 }
 
 // Prefetcher is an interface for pre-caching transaction signatures and state.
