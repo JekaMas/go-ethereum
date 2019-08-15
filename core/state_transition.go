@@ -93,11 +93,16 @@ func IntrinsicGas(ctx params.ContextWithForkFlags, data []byte, contractCreation
 				nz++
 			}
 		}
+		txDataNonZeroGas := params.TxDataNonZeroGas
+		if ctx.GetForkFlag(params.IsIstanbulEnabled) {
+			txDataNonZeroGas = params.TxDataNonZeroGasIstanbul
+		}
+
 		// Make sure we don't exceed uint64 for all data combinations
-		if (math.MaxUint64-gas)/params.TxDataNonZeroGas < nz {
+		if (math.MaxUint64-gas)/txDataNonZeroGas < nz {
 			return 0, vm.ErrOutOfGas
 		}
-		gas += nz * params.TxDataNonZeroGas
+		gas += nz * txDataNonZeroGas
 
 		z := uint64(len(data)) - nz
 		if (math.MaxUint64-gas)/params.TxDataZeroGas < z {
