@@ -925,6 +925,12 @@ func opPush1(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory
 	return nil, nil
 }
 
+func opSelfBalance(_ *uint64, interpreter *EVMInterpreter, contract *Contract, _ *Memory, stack *Stack) ([]byte, error) {
+	balance := interpreter.intPool.get().Set(interpreter.evm.StateDB.GetBalance(contract.Address()))
+	stack.push(balance)
+	return nil, nil
+}
+
 // make push instruction function
 func makePush(size uint64, pushByteSize int) executionFunc {
 	return func(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {

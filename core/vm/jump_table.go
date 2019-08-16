@@ -71,6 +71,14 @@ func newIstanbulWhistleInstructionSet() [256]operation {
 	instructionSet[SLOAD].constantGas = params.SloadGasIstanbul
 	instructionSet[EXTCODEHASH].constantGas = params.ExtcodeHashGasIstanbul
 
+	instructionSet[SELFBALANCE] = operation{
+		execute:     opSelfBalance,
+		constantGas: GasFastStep,
+		minStack:    minStack(0, 1),
+		maxStack:    maxStack(0, 1),
+		valid:       true,
+	}
+
 	return instructionSet
 }
 
