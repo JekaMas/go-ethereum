@@ -132,6 +132,7 @@ type CParamsParams struct {
 	ByzantiumForkBlock         *math.HexOrDecimal64  `json:"byzantiumForkBlock"`
 	ConstantinopleForkBlock    *math.HexOrDecimal64  `json:"constantinopleForkBlock"`
 	ConstantinopleFixForkBlock *math.HexOrDecimal64  `json:"constantinopleFixForkBlock"`
+	IstanbulForkBlock          *math.HexOrDecimal64  `json:"istanbulForkBlock"`
 	ChainID                    *math.HexOrDecimal256 `json:"chainID"`
 	MaximumExtraDataSize       math.HexOrDecimal64   `json:"maximumExtraDataSize"`
 	TieBreakingGas             bool                  `json:"tieBreakingGas"`
@@ -319,6 +320,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 		byzantiumBlock      *big.Int
 		constantinopleBlock *big.Int
 		petersburgBlock     *big.Int
+		istanbulBlock       *big.Int
 	)
 	if chainParams.Params.HomesteadForkBlock != nil {
 		homesteadBlock = big.NewInt(int64(*chainParams.Params.HomesteadForkBlock))
@@ -339,11 +341,14 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	if chainParams.Params.ConstantinopleForkBlock != nil {
 		constantinopleBlock = big.NewInt(int64(*chainParams.Params.ConstantinopleForkBlock))
 	}
+	if constantinopleBlock != nil && petersburgBlock == nil {
+		petersburgBlock = big.NewInt(100000000000)
+	}
 	if chainParams.Params.ConstantinopleFixForkBlock != nil {
 		petersburgBlock = big.NewInt(int64(*chainParams.Params.ConstantinopleFixForkBlock))
 	}
-	if constantinopleBlock != nil && petersburgBlock == nil {
-		petersburgBlock = big.NewInt(100000000000)
+	if chainParams.Params.IstanbulForkBlock != nil {
+		istanbulBlock = big.NewInt(int64(*chainParams.Params.IstanbulForkBlock))
 	}
 	genesis := &core.Genesis{
 		Config: &params.ChainConfig{
@@ -357,6 +362,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 			ByzantiumBlock:      byzantiumBlock,
 			ConstantinopleBlock: constantinopleBlock,
 			PetersburgBlock:     petersburgBlock,
+			IstanbulBlock:       istanbulBlock,
 		},
 		Nonce:      uint64(chainParams.Genesis.Nonce),
 		Timestamp:  uint64(chainParams.Genesis.Timestamp),
@@ -436,7 +442,7 @@ func (api *RetestethAPI) SendRawTransaction(ctx context.Context, rawTx hexutil.B
 
 func (api *RetestethAPI) MineBlocks(ctx context.Context, number uint64) (bool, error) {
 	for i := 0; i < int(number); i++ {
-		ctxWithBlock := api.blockchain.Config().WithEIPsFlags(ctx, big.NewInt(int64(api.blockNumber + 1)))
+		ctxWithBlock := api.blockchain.Config().WithEIPsFlags(ctx, big.NewInt(int64(api.blockNumber+1)))
 		if err := api.mineBlock(ctxWithBlock); err != nil {
 			return false, err
 		}
