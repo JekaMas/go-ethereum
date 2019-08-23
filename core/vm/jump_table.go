@@ -60,7 +60,27 @@ var (
 	spuriousDragonInstructionSet   = newSpuriousDragonInstructionSet()
 	byzantiumInstructionSet        = newByzantiumInstructionSet()
 	constantinopleInstructionSet   = newConstantinopleInstructionSet()
+	istanbulInstructionSet         = newIstanbulWhistleInstructionSet()
 )
+
+// newIstanbulWhistleInstructionSet returns the frontier, homestead
+// byzantium, contantinople and istanbul instructions.
+func newIstanbulWhistleInstructionSet() [256]operation {
+	instructionSet := newConstantinopleInstructionSet()
+	instructionSet[BALANCE].constantGas = params.BalanceGasIstanbul
+	instructionSet[SLOAD].constantGas = params.SloadGasIstanbul
+	instructionSet[EXTCODEHASH].constantGas = params.ExtcodeHashGasIstanbul
+
+	instructionSet[SELFBALANCE] = operation{
+		execute:     opSelfBalance,
+		constantGas: GasFastStep,
+		minStack:    minStack(0, 1),
+		maxStack:    maxStack(0, 1),
+		valid:       true,
+	}
+
+	return instructionSet
+}
 
 // NewConstantinopleInstructionSet returns the frontier, homestead
 // byzantium and contantinople instructions.

@@ -74,11 +74,14 @@ const (
 	CallGasEIP150          uint64 = 700 // Static portion of gas for CALL-derivates after EIP 150 (Tangerine)
 	BalanceGasFrontier     uint64 = 20  // The cost of a BALANCE operation
 	BalanceGasEIP150       uint64 = 400 // The cost of a BALANCE operation after Tangerine
+	BalanceGasIstanbul     uint64 = 700 // The cost of a BALANCE operation after Istanbul
 	ExtcodeSizeGasFrontier uint64 = 20  // Cost of EXTCODESIZE before EIP 150 (Tangerine)
 	ExtcodeSizeGasEIP150   uint64 = 700 // Cost of EXTCODESIZE after EIP 150 (Tangerine)
 	SloadGasFrontier       uint64 = 50
 	SloadGasEIP150         uint64 = 200
+	SloadGasIstanbul       uint64 = 800  // Cost of SLOAD after Istanbul
 	ExtcodeHashGas         uint64 = 400  // Cost of EXTCODEHASH (introduced in Constantinople)
+	ExtcodeHashGasIstanbul uint64 = 700  // Cost of EXTCODEHASH after Istanbul
 	SelfdestructGasEIP150  uint64 = 5000 // Cost of SELFDESTRUCT post EIP 150 (Tangerine)
 
 	// EXP has a dynamic portion depending on the size of the exponent

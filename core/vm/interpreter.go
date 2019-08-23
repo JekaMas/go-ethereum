@@ -91,6 +91,8 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	// we'll set the default jump table.
 	if !cfg.JumpTable[STOP].valid {
 		switch {
+		case evm.Context.GetForkFlag(params.IsIstanbulEnabled):
+			cfg.JumpTable = istanbulInstructionSet
 		case evm.Context.GetForkFlag(params.IsConstantinopleEnabled):
 			cfg.JumpTable = constantinopleInstructionSet
 		case evm.Context.GetForkFlag(params.IsByzantiumEnabled):
