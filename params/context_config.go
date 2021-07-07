@@ -46,6 +46,7 @@ func (c *ChainConfig) getCheckers() []func(num *big.Int) bool {
 		c.IsByzantium,
 		c.IsConstantinople,
 		c.IsPetersburg,
+		c.IsIstanbul,
 		c.IsEWASM,
 	}
 }

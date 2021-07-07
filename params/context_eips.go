@@ -23,6 +23,8 @@ const (
 	isConstantinopleEnabledFunc
 	IsPetersburgEnabled
 	isPetersburgEnabledFunc
+	IsIstanbulEnabled
+	IsIstanbulEnabledFunc
 	IsEWASM
 	isEWASMFunc
 	BlockNumber
@@ -43,6 +45,7 @@ var eipFlags = []flag{
 	{IsByzantiumEnabled, isByzantiumEnabledFunc},
 	{IsConstantinopleEnabled, isConstantinopleEnabledFunc},
 	{IsPetersburgEnabled, isPetersburgEnabledFunc},
+	{IsIstanbulEnabled, IsIstanbulEnabledFunc},
 	{IsEWASM, isEWASMFunc},
 }
 
